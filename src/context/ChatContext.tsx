@@ -10,12 +10,14 @@ interface ChatContextType {
   messages: ChatMessage[];
   isTyping: boolean;
   streamingMessage: string;
+  isStreamingThinking: boolean;
   sendMessage: (text: string) => Promise<void>;
   selectCharacter: (characterId: string) => Promise<void>;
   addCustomCharacter: (characterData: Omit<Character, 'id' | 'isCustom'>) => Promise<Character>;
   deleteCharacter: (characterId: string) => Promise<void>;
   clearMessages: () => Promise<void>;
   isLoading: boolean;
+  currentBarrier: number | null;
 }
 
 const ChatContext = createContext<ChatContextType | undefined>(undefined);
@@ -26,6 +28,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isTyping, setIsTyping] = useState<boolean>(false);
   const [streamingMessage, setStreamingMessage] = useState<string>('');
+  const [isStreamingThinking, setIsStreamingThinking] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
   // Initialize characters and active character
@@ -37,7 +40,8 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
         setCharacters(combined);
 
         const savedId = await StorageService.getActiveCharacterId();
-        const selected = combined.find((c) => c.id === savedId) || combined[0];
+        const normalizedId = savedId === 'helena' ? 'marina' : savedId;
+        const selected = combined.find((c) => c.id === normalizedId) || combined[0];
         setActiveCharacter(selected);
 
         // Load messages for selected character
@@ -110,6 +114,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
 
       setIsTyping(true);
       setStreamingMessage('');
+      setIsStreamingThinking(false);
 
       let accumulated = '';
       try {
@@ -120,6 +125,9 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
           onToken: (token) => {
             accumulated += token;
             setStreamingMessage(accumulated);
+          },
+          onPause: (isThinking) => {
+            setIsStreamingThinking(isThinking);
           },
         });
 
@@ -139,6 +147,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       } finally {
         setIsTyping(false);
         setStreamingMessage('');
+        setIsStreamingThinking(false);
       }
     },
     [activeCharacter, isTyping, messages]
@@ -193,6 +202,19 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     await StorageService.saveMessages(activeCharacter.id, [initialGreeting]);
   }, [activeCharacter]);
 
+  const currentBarrier = React.useMemo(() => {
+    if (!activeCharacter.hasBarrierMeter && activeCharacter.initialBarrier === undefined) {
+      return null;
+    }
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const match = messages[i].text.match(/\[(?:Status Atual:\s*)?Barreiras?(?:\s*em\s*)?[:\s]+(\d+)%\]/i);
+      if (match) {
+        return Math.min(100, Math.max(0, parseInt(match[1], 10)));
+      }
+    }
+    return activeCharacter.initialBarrier ?? 98;
+  }, [activeCharacter, messages]);
+
   return (
     <ChatContext.Provider
       value={{
@@ -201,12 +223,14 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
         messages,
         isTyping,
         streamingMessage,
+        isStreamingThinking,
         sendMessage,
         selectCharacter,
         addCustomCharacter,
         deleteCharacter,
         clearMessages,
         isLoading,
+        currentBarrier,
       }}>
       {children}
     </ChatContext.Provider>

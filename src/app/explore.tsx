@@ -48,7 +48,9 @@ export default function ExploreScreen() {
           styles.scrollContent,
           { paddingBottom: BottomTabInset + Spacing.five },
         ]}
-        showsVerticalScrollIndicator={false}>
+        showsVerticalScrollIndicator={true}
+        indicatorStyle="white"
+        scrollEventThrottle={16}>
         <View style={styles.centerWrapper}>
           {/* Header */}
           <View style={styles.headerRow}>
@@ -100,7 +102,7 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingHorizontal: Spacing.four,
-    paddingTop: Platform.OS === 'web' ? Spacing.five : Spacing.two,
+    paddingTop: Platform.OS === 'web' ? Spacing.three : Spacing.two,
   },
   centerWrapper: {
     maxWidth: MaxContentWidth,

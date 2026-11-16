@@ -9,6 +9,9 @@ export interface Character {
   accentColor: string;
   tags: string[];
   isCustom?: boolean;
+  initialBarrier?: number;
+  hasBarrierMeter?: boolean;
+  avatarImage?: any;
 }
 
 export interface ChatMessage {

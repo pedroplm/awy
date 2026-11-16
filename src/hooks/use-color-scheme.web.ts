@@ -1,23 +1,18 @@
 import { useSyncExternalStore } from 'react';
-import { useColorScheme as useRNColorScheme } from 'react-native';
 
 const emptySubscribe = () => () => {};
 
 /**
- * To support static rendering, this value needs to be re-calculated on the client side for web
+ * To support static / server rendering and prevent hydration mismatch on web,
+ * this hook provides a safe snapshot between SSR and client.
  */
-export function useColorScheme() {
-  const isClient = useSyncExternalStore(
+export function useColorScheme(): 'light' | 'dark' {
+  return useSyncExternalStore(
     emptySubscribe,
-    () => true,
-    () => false
+    () => {
+      if (typeof window === 'undefined') return 'light';
+      return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    },
+    () => 'light'
   );
-
-  const colorScheme = useRNColorScheme();
-
-  if (isClient) {
-    return colorScheme;
-  }
-
-  return 'light';
 }

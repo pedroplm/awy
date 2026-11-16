@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { Character } from '@/types/chat';
 import { Spacing } from '@/constants/theme';
@@ -31,7 +32,15 @@ export function CharacterCard({ character, isActive, onSelect, onDelete }: Props
             styles.avatarBubble,
             { borderColor: character.accentColor, backgroundColor: theme.background },
           ]}>
-          <Text style={styles.avatarEmoji}>{character.avatar}</Text>
+          {character.avatarImage ? (
+            <Image
+              source={character.avatarImage}
+              style={styles.avatarImage}
+              contentFit="cover"
+            />
+          ) : (
+            <Text style={styles.avatarEmoji}>{character.avatar}</Text>
+          )}
         </View>
 
         <View style={styles.headerInfo}>
@@ -115,6 +124,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: Spacing.three,
+    overflow: 'hidden',
+  },
+  avatarImage: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 24,
   },
   avatarEmoji: {
     fontSize: 26,

@@ -75,7 +75,7 @@ export function NewCharacterModal({ visible, onClose, onCreate }: Props) {
             </TouchableOpacity>
           </View>
 
-          <ScrollView style={styles.form} showsVerticalScrollIndicator={false}>
+          <ScrollView style={styles.form} showsVerticalScrollIndicator={true} indicatorStyle="white">
             {/* Avatar Selection */}
             <Text style={[styles.label, { color: theme.textSecondary }]}>Pick an Avatar Emoji</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.emojiList}>
