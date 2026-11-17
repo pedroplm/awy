@@ -18,6 +18,8 @@ interface ChatContextType {
   clearMessages: () => Promise<void>;
   isLoading: boolean;
   currentBarrier: number | null;
+  isTextOnlyMode: boolean;
+  setTextOnlyMode: (enabled: boolean) => Promise<void>;
 }
 
 const ChatContext = createContext<ChatContextType | undefined>(undefined);
@@ -30,11 +32,15 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
   const [streamingMessage, setStreamingMessage] = useState<string>('');
   const [isStreamingThinking, setIsStreamingThinking] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [isTextOnlyMode, setIsTextOnlyMode] = useState<boolean>(false);
 
-  // Initialize characters and active character
+  // Initialize characters, active character, and preferences
   useEffect(() => {
     async function init() {
       try {
+        const textOnlyPref = await StorageService.getTextOnlyMode();
+        setIsTextOnlyMode(textOnlyPref);
+
         const customChars = await StorageService.getCustomCharacters();
         const combined = [...DEFAULT_CHARACTERS, ...customChars];
         setCharacters(combined);
@@ -207,13 +213,18 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       return null;
     }
     for (let i = messages.length - 1; i >= 0; i--) {
-      const match = messages[i].text.match(/\[(?:Status Atual:\s*)?Barreiras?(?:\s*em\s*)?[:\s]+(\d+)%\]/i);
+      const match = messages[i].text.match(/\[(?:Status Atual:\s*)?Barreiras?(?:\s*em\s*)?[:\s]+(\d+)%[^\]]*\]/i);
       if (match) {
         return Math.min(100, Math.max(0, parseInt(match[1], 10)));
       }
     }
     return activeCharacter.initialBarrier ?? 98;
   }, [activeCharacter, messages]);
+
+  const setTextOnlyMode = useCallback(async (enabled: boolean) => {
+    setIsTextOnlyMode(enabled);
+    await StorageService.saveTextOnlyMode(enabled);
+  }, []);
 
   return (
     <ChatContext.Provider
@@ -231,6 +242,8 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
         clearMessages,
         isLoading,
         currentBarrier,
+        isTextOnlyMode,
+        setTextOnlyMode,
       }}>
       {children}
     </ChatContext.Provider>

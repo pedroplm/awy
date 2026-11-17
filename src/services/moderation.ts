@@ -186,9 +186,10 @@ export const ModerationService = {
 
         if (charId === "nova") {
             return (
-                `*dá um pulo para trás assustada, balançando as duas mãos e a cabeça com os olhos arregalados*\n\n` +
-                `— E-ei! Não gostei nada disso! Eu estou aqui para criar histórias divertidas, momentos fofos e mágicos com você, não essas coisas pesadas e feias! ` +
-                `Não fale desse jeito comigo, por favor!`
+                `[Barreiras: 100%]\n` +
+                `*(Nova dá um salto para trás com os olhos arregalados de choque, fechando a cara com uma fúria decepcionada e apontando para a saída)*\n\n` +
+                `— E-EI! Que nojo! Eu sabia que não devia ter baixado a guarda! Se você achou que eu ia aceitar essa baixaria ou obscenidade aqui, pode dar meia-volta agora mesmo! ` +
+                `Guarda essa vulgaridade longe de mim e não me dirija mais a palavra assim!`
             );
         }
 

@@ -7,7 +7,7 @@ import {
   TouchableOpacity,
   Platform,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -15,11 +15,12 @@ import { useChat } from '@/context/ChatContext';
 import { useTheme } from '@/hooks/use-theme';
 import { CharacterCard } from '@/components/chat/CharacterCard';
 import { NewCharacterModal } from '@/components/chat/NewCharacterModal';
-import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
+import { MaxContentWidth, Spacing } from '@/constants/theme';
 
 export default function ExploreScreen() {
   const router = useRouter();
   const theme = useTheme();
+  const insets = useSafeAreaInsets();
   const [modalVisible, setModalVisible] = useState(false);
 
   const {
@@ -46,7 +47,7 @@ export default function ExploreScreen() {
       <ScrollView
         contentContainerStyle={[
           styles.scrollContent,
-          { paddingBottom: BottomTabInset + Spacing.five },
+          { paddingBottom: Math.max(Spacing.five, insets.bottom + Spacing.four) },
         ]}
         showsVerticalScrollIndicator={true}
         indicatorStyle="white"
@@ -61,12 +62,21 @@ export default function ExploreScreen() {
               </Text>
             </View>
 
-            <TouchableOpacity
-              onPress={() => setModalVisible(true)}
-              style={[styles.createButton, { backgroundColor: activeCharacter.accentColor }]}>
-              <Ionicons name="add" size={20} color="#FFFFFF" />
-              <Text style={styles.createButtonText}>Create</Text>
-            </TouchableOpacity>
+            <View style={styles.headerButtons}>
+              <TouchableOpacity
+                onPress={() => router.push('/')}
+                style={[styles.chatShortcutButton, { backgroundColor: theme.backgroundElement }]}
+                accessibilityLabel="Ir para o chat atual">
+                <Ionicons name="chatbubble-ellipses-outline" size={20} color={theme.text} />
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={() => setModalVisible(true)}
+                style={[styles.createButton, { backgroundColor: activeCharacter.accentColor }]}>
+                <Ionicons name="add" size={20} color="#FFFFFF" />
+                <Text style={styles.createButtonText}>Create</Text>
+              </TouchableOpacity>
+            </View>
           </View>
 
           {/* Character Cards */}
@@ -128,6 +138,18 @@ const styles = StyleSheet.create({
     fontSize: 14,
     marginTop: 4,
     lineHeight: 20,
+  },
+  headerButtons: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.two,
+  },
+  chatShortcutButton: {
+    width: 42,
+    height: 42,
+    borderRadius: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   createButton: {
     flexDirection: 'row',

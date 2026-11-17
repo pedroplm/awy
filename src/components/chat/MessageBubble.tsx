@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   View,
   Text,
@@ -12,10 +12,13 @@ import { Ionicons } from '@expo/vector-icons';
 import { ChatMessage, Character } from '@/types/chat';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import { useChat } from '@/context/ChatContext';
 import {
   getMarinaStageImage,
   getMarinaStageInfo,
+  getNovaContextualImage,
 } from '@/constants/characters';
+import { RoommateTrackerService } from '@/services/roommateTracker';
 
 interface Props {
   message: ChatMessage;
@@ -32,25 +35,72 @@ export function MessageBubble({
 }: Props) {
   const isUser = message.sender === 'user';
   const theme = useTheme();
+  const { isTextOnlyMode } = useChat();
   const [modalVisible, setModalVisible] = useState(false);
 
-  // Parse barrier tag if present in character response: e.g. [Barreiras: 94%] or [Status Atual: Barreiras em 98%]
+  // Parse barrier tag if present: e.g. [Barreiras: 94%] or [Barreiras: 95% | Rotina: ... | Humor: ...]
   const barrierMatch = !isUser
-    ? message.text.match(/\[(?:Status Atual:\s*)?Barreiras?(?:\s*em\s*)?[:\s]+(\d+)%\]\s*/i)
+    ? message.text.match(/\[(?:Status Atual:\s*)?Barreiras?(?:\s*em\s*)?[:\s]+(\d+)%([^\]]*)\]\s*/i)
     : null;
   const barrierValue = barrierMatch ? parseInt(barrierMatch[1], 10) : null;
+  const extraTagInfo = barrierMatch && barrierMatch[2] ? barrierMatch[2] : '';
+
+  // Extract Routine / Day phase if present (e.g. "Dia 2 - Acordar / Café da Manhã" or "Primeiro dia de mudança - Manhã")
+  const routineMatch = extraTagInfo.match(/(?:Rotina|Dia[^|:]*):\s*([^|\]]+)/i);
+  const routineText = routineMatch ? routineMatch[1].trim() : null;
+
+  // Extract Roommate Mood if present (e.g. "Desconfiada e Territorial")
+  const moodMatch = extraTagInfo.match(/Humor:\s*([^|\]]+)/i);
+  const moodText = moodMatch ? moodMatch[1].trim() : null;
+
   const displayText = barrierMatch ? message.text.replace(barrierMatch[0], '') : message.text;
 
-  // Resolve dynamic avatar / milestone stage for Marina
+  // Resolve dynamic avatar / milestone / contextual sentiment stage
   const isMarina = character.id === 'marina' || character.id === 'helena';
-  const effectiveBarrier = barrierValue ?? 98;
+  const isNova = character.id === 'nova';
+  const effectiveBarrier = barrierValue ?? character.initialBarrier ?? 98;
+
+  // Track Roommate state for Nova (Data, Hora, Local, Sentimento)
+  const novaState = useMemo(() => {
+    if (!isNova) return null;
+    return RoommateTrackerService.parseMessageState(message.text);
+  }, [isNova, message.text]);
+
+  const novaInfo = useMemo(() => {
+    if (!isNova || !novaState) return null;
+    return getNovaContextualImage({
+      barrier: effectiveBarrier,
+      location: novaState.location,
+      sentiment: novaState.sentiment,
+    });
+  }, [isNova, novaState, effectiveBarrier]);
+
   const avatarSource = isMarina
     ? getMarinaStageImage(effectiveBarrier)
+    : isNova && novaInfo
+    ? novaInfo.image
     : character.avatarImage;
-  const stageInfo = isMarina ? getMarinaStageInfo(effectiveBarrier) : null;
 
-  // Display the full-bleed card image ONLY on milestone barrier messages (95%, 90%, 85%, 80%, etc.)
-  const hasCardImage = !isUser && isMarina && Boolean(showCardImage) && Boolean(avatarSource);
+  const stageInfo = isMarina
+    ? getMarinaStageInfo(effectiveBarrier)
+    : isNova && novaInfo
+    ? {
+        tier: novaInfo.tier,
+        image: novaInfo.image,
+        title: novaInfo.title,
+        expression: novaInfo.expression,
+        barrierRange: '',
+      }
+    : null;
+
+  // Display the full-bleed card image for Marina milestones OR Nova milestones/sentiment cards!
+  // Suppressed completely when isTextOnlyMode is enabled!
+  const hasCardImage =
+    !isTextOnlyMode &&
+    !isUser &&
+    (isMarina || isNova) &&
+    Boolean(showCardImage) &&
+    Boolean(avatarSource);
 
   // Helper to parse roleplay asterisks: e.g. *gently smiles* into italicized text
   const renderFormattedText = (text: string) => {
@@ -93,23 +143,28 @@ export function MessageBubble({
         isUser ? styles.userContainer : styles.characterContainer,
       ]}>
       {!isUser && (
-        <TouchableOpacity
-          activeOpacity={0.8}
-          onPress={isMarina ? () => setModalVisible(true) : undefined}
-          style={[
-            styles.avatarBubble,
-            { borderColor: character.accentColor, backgroundColor: theme.backgroundElement },
-          ]}>
-          {avatarSource ? (
-            <Image
-              source={avatarSource}
-              style={styles.avatarImage}
-              contentFit="cover"
-            />
-          ) : (
-            <Text style={styles.avatarEmoji}>{character.avatar}</Text>
-          )}
-        </TouchableOpacity>
+        <View style={styles.senderHeader}>
+          <TouchableOpacity
+            activeOpacity={0.8}
+            onPress={!isTextOnlyMode && avatarSource ? () => setModalVisible(true) : undefined}
+            style={[
+              styles.avatarIconSmall,
+              { borderColor: character.accentColor, backgroundColor: theme.backgroundElement },
+            ]}>
+            {!isTextOnlyMode && avatarSource ? (
+              <Image
+                source={avatarSource}
+                style={styles.avatarIconImage}
+                contentFit="cover"
+              />
+            ) : (
+              <Text style={styles.avatarIconEmoji}>{character.avatar}</Text>
+            )}
+          </TouchableOpacity>
+          <Text style={[styles.senderName, { color: character.accentColor }]}>
+            {character.name}
+          </Text>
+        </View>
       )}
 
       {hasCardImage ? (
@@ -147,7 +202,7 @@ export function MessageBubble({
                   ]}>
                   <Ionicons name="sparkles" size={12} color="#FFFFFF" />
                   <Text style={styles.milestonePillText}>
-                    Nova Postura ({stageInfo.tier}%)
+                    {stageInfo.title}
                   </Text>
                 </View>
               ) : (
@@ -222,6 +277,49 @@ export function MessageBubble({
                   {Math.max(0, 100 - barrierValue)}%
                 </Text>
               </Text>
+              {routineText && (
+                <>
+                  <Text style={[styles.barrierDivider, { color: theme.textSecondary }]}>•</Text>
+                  <Ionicons name="time-outline" size={11} color={character.accentColor} />
+                  <Text style={[styles.barrierBadgeText, { color: theme.textSecondary, fontWeight: '600' }]}>
+                    {routineText}
+                  </Text>
+                </>
+              )}
+              {novaState && (
+                <>
+                  <Text style={[styles.barrierDivider, { color: theme.textSecondary }]}>•</Text>
+                  <Ionicons
+                    name={novaState.location === 'university' ? 'school-outline' : 'home-outline'}
+                    size={11}
+                    color={character.accentColor}
+                  />
+                  <Text style={[styles.barrierBadgeText, { color: theme.textSecondary }]}>
+                    {novaState.location === 'university' ? 'University' : 'Apê'}
+                  </Text>
+                </>
+              )}
+              {moodText && (
+                <>
+                  <Text style={[styles.barrierDivider, { color: theme.textSecondary }]}>•</Text>
+                  <Ionicons
+                    name={novaState?.sentiment === 'happy' ? 'sparkles' : 'sparkles-outline'}
+                    size={11}
+                    color={novaState?.sentiment === 'happy' ? '#F59E0B' : character.accentColor}
+                  />
+                  <Text
+                    style={[
+                      styles.barrierBadgeText,
+                      {
+                        color: novaState?.sentiment === 'happy' ? '#F59E0B' : character.accentColor,
+                        fontStyle: 'italic',
+                        fontWeight: novaState?.sentiment === 'happy' ? '700' : '400',
+                      },
+                    ]}>
+                    {moodText}
+                  </Text>
+                </>
+              )}
             </View>
           )}
 
@@ -236,8 +334,8 @@ export function MessageBubble({
         </View>
       )}
 
-      {/* Full-view modal for character milestone posture */}
-      {isMarina && (
+      {/* Full-view modal for character milestone posture / avatar */}
+      {avatarSource && (
         <Modal
           visible={modalVisible}
           transparent
@@ -314,34 +412,42 @@ export function MessageBubble({
 const styles = StyleSheet.create({
   container: {
     marginVertical: Spacing.one + 2,
-    flexDirection: 'row',
-    alignItems: 'flex-start',
     paddingHorizontal: Spacing.three,
+    width: '100%',
   },
   userContainer: {
-    justifyContent: 'flex-end',
+    alignItems: 'flex-end',
   },
   characterContainer: {
-    justifyContent: 'flex-start',
+    alignItems: 'flex-start',
   },
-  avatarBubble: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+  senderHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 4,
+    paddingLeft: Spacing.half,
+  },
+  avatarIconSmall: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
     borderWidth: 1.5,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: Spacing.two,
-    marginTop: 2,
     overflow: 'hidden',
   },
-  avatarImage: {
+  avatarIconImage: {
     width: '100%',
     height: '100%',
-    borderRadius: 16,
+    borderRadius: 11,
   },
-  avatarEmoji: {
-    fontSize: 18,
+  avatarIconEmoji: {
+    fontSize: 12,
+  },
+  senderName: {
+    fontSize: 12,
+    fontWeight: '700',
+    marginLeft: 6,
   },
   // Rich visual novel card bubble
   cardBubble: {
@@ -460,6 +566,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     alignSelf: 'flex-start',
+    flexWrap: 'wrap',
     gap: 5,
     paddingHorizontal: 8,
     paddingVertical: 3,

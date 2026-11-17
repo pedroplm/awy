@@ -304,9 +304,11 @@ export function CustomSidebar(props: TabListProps) {
                         ? '#EF4444'
                         : currentBarrier > 50
                         ? '#F59E0B'
-                        : currentBarrier > 20
+                        : currentBarrier > 30
                         ? '#8B5CF6'
-                        : '#10B981',
+                        : currentBarrier > 10
+                        ? '#10B981'
+                        : '#EC4899',
                   },
                 ]}
               />

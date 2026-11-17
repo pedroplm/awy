@@ -5,6 +5,7 @@ const STORAGE_KEYS = {
   MESSAGES_PREFIX: '@awy_messages_',
   CUSTOM_CHARACTERS: '@awy_custom_characters',
   ACTIVE_CHARACTER_ID: '@awy_active_character_id',
+  TEXT_ONLY_MODE: '@awy_text_only_mode',
 };
 
 export const StorageService = {
@@ -71,6 +72,24 @@ export const StorageService = {
       await AsyncStorage.setItem(STORAGE_KEYS.ACTIVE_CHARACTER_ID, id);
     } catch (err) {
       console.warn('Failed to save active character id:', err);
+    }
+  },
+
+  async getTextOnlyMode(): Promise<boolean> {
+    try {
+      const data = await AsyncStorage.getItem(STORAGE_KEYS.TEXT_ONLY_MODE);
+      return data === 'true';
+    } catch (err) {
+      console.warn('Failed to get text-only mode preference:', err);
+      return false;
+    }
+  },
+
+  async saveTextOnlyMode(enabled: boolean): Promise<void> {
+    try {
+      await AsyncStorage.setItem(STORAGE_KEYS.TEXT_ONLY_MODE, enabled ? 'true' : 'false');
+    } catch (err) {
+      console.warn('Failed to save text-only mode preference:', err);
     }
   },
 };

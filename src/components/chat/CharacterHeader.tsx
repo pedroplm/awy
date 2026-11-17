@@ -2,24 +2,42 @@ import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Alert, Modal } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 import { Character } from '@/types/chat';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useChat } from '@/context/ChatContext';
 import { UsageModal } from './UsageModal';
-import { getMarinaStageImage, getMarinaStageInfo } from '@/constants/characters';
+import {
+  getMarinaStageImage,
+  getMarinaStageInfo,
+  getNovaStageImage,
+  getNovaStageInfo,
+} from '@/constants/characters';
 
 interface Props {
   character: Character;
   onClearChat: () => void;
   onOpenRoster?: () => void;
+  onBack?: () => void;
 }
 
-export function CharacterHeader({ character, onClearChat, onOpenRoster }: Props) {
+export function CharacterHeader({ character, onClearChat, onOpenRoster, onBack }: Props) {
+  const router = useRouter();
   const theme = useTheme();
-  const { currentBarrier } = useChat();
+  const { currentBarrier, isTextOnlyMode } = useChat();
   const [usageModalVisible, setUsageModalVisible] = useState(false);
   const [imageModalVisible, setImageModalVisible] = useState(false);
+
+  const handleBack = () => {
+    if (onBack) {
+      onBack();
+    } else if (router.canGoBack()) {
+      router.back();
+    } else {
+      router.push('/explore');
+    }
+  };
 
   const handleClearPress = () => {
     Alert.alert(
@@ -32,7 +50,44 @@ export function CharacterHeader({ character, onClearChat, onOpenRoster }: Props)
     );
   };
 
-  const getStage = (barrier: number) => {
+  const getStage = (barrier: number, charId?: string) => {
+    if (charId === 'nova') {
+      if (barrier >= 65) {
+        return {
+          level: 1,
+          title: 'Roommate Espinhosa',
+          color: '#F59E0B',
+          icon: 'shield' as const,
+          description: 'Territorial, regras rígidas e desconfiada',
+        };
+      }
+      if (barrier >= 35) {
+        return {
+          level: 2,
+          title: 'Roommate Energética',
+          color: '#F59E0B',
+          icon: 'sparkles' as const,
+          description: 'Brincadeiras, cúmplice no apê e super incentivadora',
+        };
+      }
+      if (barrier >= 10) {
+        return {
+          level: 3,
+          title: 'Cofre Profundo',
+          color: '#EC4899',
+          icon: 'heart-outline' as const,
+          description: 'Sensível, medo de abandono e vulnerabilidade',
+        };
+      }
+      return {
+        level: 4,
+        title: 'Conexão Total',
+        color: '#8B5CF6',
+        icon: 'heart' as const,
+        description: 'O apê é um lar, confiança e carinho puro',
+      };
+    }
+
     if (barrier > 80) {
       return {
         level: 1,
@@ -51,7 +106,7 @@ export function CharacterHeader({ character, onClearChat, onOpenRoster }: Props)
         description: 'Pequenos gestos de abertura',
       };
     }
-    if (barrier > 20) {
+    if (barrier > 30) {
       return {
         level: 3,
         title: 'Receptiva & Conectada',
@@ -60,12 +115,21 @@ export function CharacterHeader({ character, onClearChat, onOpenRoster }: Props)
         description: 'Compartilha fragmentos do passado',
       };
     }
+    if (barrier > 10) {
+      return {
+        level: 4,
+        title: 'Desarmada & Íntima',
+        color: '#10B981',
+        icon: 'heart-outline' as const,
+        description: 'Vulnerabilidade real e afeto sincero',
+      };
+    }
     return {
-      level: 4,
-      title: 'Desarmada & Vulnerável',
-      color: '#10B981',
+      level: 5,
+      title: 'Vínculo Puro & Entrega',
+      color: '#EC4899',
       icon: 'heart' as const,
-      description: 'Vulnerabilidade real e afeto sincero',
+      description: 'Conexão profunda, afeto e cumplicidade total',
     };
   };
 
@@ -75,13 +139,21 @@ export function CharacterHeader({ character, onClearChat, onOpenRoster }: Props)
     currentBarrier !== null;
   const barrier = currentBarrier ?? character.initialBarrier ?? 98;
   const intimacy = Math.max(0, Math.min(100, 100 - barrier));
-  const stage = getStage(barrier);
+  const stage = getStage(barrier, character.id);
 
   const isMarina = character.id === 'marina' || character.id === 'helena';
+  const isNova = character.id === 'nova';
   const currentAvatar = isMarina
     ? getMarinaStageImage(barrier)
+    : isNova
+    ? getNovaStageImage(barrier)
     : character.avatarImage;
-  const stageInfo = isMarina ? getMarinaStageInfo(barrier) : null;
+  const stageInfo = isMarina
+    ? getMarinaStageInfo(barrier)
+    : isNova
+    ? getNovaStageInfo(barrier)
+    : null;
+  const hasImage = Boolean(currentAvatar);
 
   return (
     <View
@@ -91,45 +163,66 @@ export function CharacterHeader({ character, onClearChat, onOpenRoster }: Props)
       ]}>
       {/* Top Profile Section */}
       <View style={styles.topRow}>
-        <TouchableOpacity
-          style={styles.profileSection}
-          onPress={onOpenRoster}
-          activeOpacity={0.8}>
+        <View style={styles.leftNavGroup}>
           <TouchableOpacity
-            activeOpacity={0.8}
-            onPress={isMarina ? () => setImageModalVisible(true) : onOpenRoster}
-            style={[
-              styles.avatarBadge,
-              { borderColor: character.accentColor, backgroundColor: theme.backgroundElement },
-            ]}>
-            {currentAvatar ? (
-              <Image
-                source={currentAvatar}
-                style={styles.avatarImage}
-                contentFit="cover"
-              />
-            ) : (
-              <Text style={styles.avatarEmoji}>{character.avatar}</Text>
-            )}
+            onPress={handleBack}
+            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+            style={styles.backButton}
+            accessibilityLabel="Voltar"
+            activeOpacity={0.7}>
+            <Ionicons name="arrow-back" size={24} color={theme.text} />
           </TouchableOpacity>
 
-          <View style={styles.infoCol}>
-            <View style={styles.nameRow}>
-              <Text style={[styles.name, { color: theme.text }]}>{character.name}</Text>
-              {character.isCustom && (
-                <View style={[styles.customBadge, { backgroundColor: character.accentColor }]}>
-                  <Text style={styles.customBadgeText}>Custom</Text>
-                </View>
+          <TouchableOpacity
+            style={styles.profileSection}
+            onPress={onOpenRoster}
+            activeOpacity={0.8}>
+            <TouchableOpacity
+              activeOpacity={0.8}
+              onPress={!isTextOnlyMode && hasImage ? () => setImageModalVisible(true) : onOpenRoster}
+              style={[
+                styles.avatarBadge,
+                { borderColor: character.accentColor, backgroundColor: theme.backgroundElement },
+              ]}>
+              {!isTextOnlyMode && currentAvatar ? (
+                <Image
+                  source={currentAvatar}
+                  style={styles.avatarImage}
+                  contentFit="cover"
+                />
+              ) : (
+                <Text style={styles.avatarEmoji}>{character.avatar}</Text>
               )}
+            </TouchableOpacity>
+
+            <View style={styles.infoCol}>
+              <View style={styles.nameRow}>
+                <Text style={[styles.name, { color: theme.text }]}>{character.name}</Text>
+                {character.isCustom && (
+                  <View style={[styles.customBadge, { backgroundColor: character.accentColor }]}>
+                    <Text style={styles.customBadgeText}>Custom</Text>
+                  </View>
+                )}
+              </View>
+              <View style={styles.statusRow}>
+                <View
+                  style={[
+                    styles.statusDot,
+                    isTextOnlyMode && { backgroundColor: '#6366F1' },
+                  ]}
+                />
+                <Text
+                  style={[styles.statusText, { color: theme.textSecondary }]}
+                  numberOfLines={1}
+                  ellipsizeMode="tail">
+                  {isTextOnlyMode
+                    ? 'Always with you • Modo Texto Ativo'
+                    : 'Always with you • Roleplay Active'}
+                </Text>
+              </View>
             </View>
-            <View style={styles.statusRow}>
-              <View style={styles.statusDot} />
-              <Text style={[styles.statusText, { color: theme.textSecondary }]}>
-                Always with you • Roleplay Active
-              </Text>
-            </View>
-          </View>
-        </TouchableOpacity>
+          </TouchableOpacity>
+        </View>
 
         <View style={styles.actions}>
           <TouchableOpacity
@@ -171,7 +264,7 @@ export function CharacterHeader({ character, onClearChat, onOpenRoster }: Props)
 
             <TouchableOpacity
               activeOpacity={0.7}
-              onPress={isMarina ? () => setImageModalVisible(true) : undefined}
+              onPress={hasImage ? () => setImageModalVisible(true) : undefined}
               style={styles.meterRightCol}>
               <Text style={[styles.intimacyLabel, { color: theme.textSecondary }]}>
                 NÍVEL DE INTIMIDADE
@@ -181,7 +274,7 @@ export function CharacterHeader({ character, onClearChat, onOpenRoster }: Props)
                 <Text style={[styles.intimacyPercentText, { color: stage.color }]}>
                   {intimacy}%
                 </Text>
-                {isMarina && (
+                {hasImage && (
                   <Ionicons
                     name="camera-outline"
                     size={14}
@@ -231,8 +324,8 @@ export function CharacterHeader({ character, onClearChat, onOpenRoster }: Props)
         onClose={() => setUsageModalVisible(false)}
       />
 
-      {/* Full-size posture viewer modal for Marina */}
-      {isMarina && (
+      {/* Full-size posture viewer modal */}
+      {hasImage && (
         <Modal
           visible={imageModalVisible}
           transparent
@@ -311,6 +404,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
+  leftNavGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    marginRight: Spacing.two,
+  },
+  backButton: {
+    paddingRight: Spacing.two,
+    paddingVertical: Spacing.one,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   profileSection: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -375,6 +480,7 @@ const styles = StyleSheet.create({
   actions: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: Spacing.one,
   },
   iconButton: {
     width: 36,

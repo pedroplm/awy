@@ -8,11 +8,13 @@ import {
   ScrollView,
   Alert,
   Platform,
+  Switch,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useUsage } from '@/hooks/use-usage';
+import { useChat } from '@/context/ChatContext';
 
 interface Props {
   visible: boolean;
@@ -22,6 +24,7 @@ interface Props {
 export function UsageModal({ visible, onClose }: Props) {
   const theme = useTheme();
   const { stats, resetStats, limits } = useUsage();
+  const { isTextOnlyMode, setTextOnlyMode, activeCharacter } = useChat();
 
   const activeModel =
     process.env.EXPO_PUBLIC_GEMINI_MODEL || 'gemini-flash-lite-latest';
@@ -69,11 +72,11 @@ export function UsageModal({ visible, onClose }: Props) {
           <View style={[styles.header, { borderBottomColor: theme.backgroundElement }]}>
             <View style={styles.headerTitleRow}>
               <View style={[styles.iconBox, { backgroundColor: theme.backgroundElement }]}>
-                <Ionicons name="hardware-chip-outline" size={20} color="#F59E0B" />
+                <Ionicons name="settings-outline" size={20} color="#F59E0B" />
               </View>
               <View>
                 <Text style={[styles.title, { color: theme.text }]}>
-                  Monitor de Tokens & Custos
+                  Configurações & Monitor
                 </Text>
                 <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
                   Modelo: <Text style={{ fontWeight: '700', color: '#10B981' }}>{activeModel}</Text>
@@ -90,6 +93,42 @@ export function UsageModal({ visible, onClose }: Props) {
           </View>
 
           <ScrollView style={styles.content} showsVerticalScrollIndicator={true} indicatorStyle="white">
+            {/* Reading Mode / Text Only Preferences */}
+            <View style={[styles.sectionCard, { backgroundColor: theme.backgroundElement }]}>
+              <View style={styles.sectionHeaderRow}>
+                <Ionicons name="eye-outline" size={16} color="#EC4899" />
+                <Text style={[styles.sectionTitle, { color: theme.text }]}>
+                  Preferências de Visualização
+                </Text>
+              </View>
+
+              <View style={styles.preferenceRow}>
+                <View style={styles.preferenceTextCol}>
+                  <View style={styles.preferenceTitleLine}>
+                    <Ionicons name="document-text-outline" size={16} color={theme.text} />
+                    <Text style={[styles.preferenceTitle, { color: theme.text }]}>
+                      Modo Texto
+                    </Text>
+                    {isTextOnlyMode && (
+                      <View style={[styles.statusBadge, { backgroundColor: '#10B981' }]}>
+                        <Text style={styles.statusBadgeText}>Ativo</Text>
+                      </View>
+                    )}
+                  </View>
+                  <Text style={[styles.preferenceSubtitle, { color: theme.textSecondary }]}>
+                    Oculta todas as imagens e retratos no chat, exibindo apenas as mensagens de texto (ideal para ler no ônibus ou economizar dados).
+                  </Text>
+                </View>
+
+                <Switch
+                  value={isTextOnlyMode}
+                  onValueChange={setTextOnlyMode}
+                  trackColor={{ false: theme.backgroundSelected, true: activeCharacter.accentColor || '#6366F1' }}
+                  thumbColor="#FFFFFF"
+                />
+              </View>
+            </View>
+
             {/* Tokens Section */}
             <View style={[styles.sectionCard, { backgroundColor: theme.backgroundElement }]}>
               <View style={styles.sectionHeaderRow}>
@@ -316,6 +355,40 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 13,
     fontWeight: '700',
+  },
+  preferenceRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: Spacing.two,
+    marginTop: 2,
+  },
+  preferenceTextCol: {
+    flex: 1,
+    gap: 4,
+  },
+  preferenceTitleLine: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  preferenceTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  statusBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: 8,
+  },
+  statusBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  preferenceSubtitle: {
+    fontSize: 12,
+    lineHeight: 16,
   },
   highlightNumberBox: {
     alignItems: 'center',

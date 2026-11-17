@@ -1,6 +1,6 @@
-import { Character, ChatMessage } from "@/types/chat";
-import { UsageService } from "@/services/usage";
 import { ModerationService } from "@/services/moderation";
+import { UsageService } from "@/services/usage";
+import { Character, ChatMessage } from "@/types/chat";
 
 interface GenerateOptions {
     character: Character;
@@ -27,14 +27,18 @@ export const AIService = {
         const moderation = ModerationService.validate(userMessage);
         if (!moderation.isSafe) {
             console.warn(
-                `[Moderation] Blocked term detected ("${moderation.matchedTerm}"). Skipping external API request to protect quota and safety standing.`
+                `[Moderation] Blocked term detected ("${moderation.matchedTerm}"). Skipping external API request to protect quota and safety standing.`,
             );
             const refusalReply = ModerationService.getCharacterRefusal(
                 character,
-                moderation.category
+                moderation.category,
             );
             if (onToken) {
-                await this.streamCinematicRoleplay(refusalReply, onToken, onPause);
+                await this.streamCinematicRoleplay(
+                    refusalReply,
+                    onToken,
+                    onPause,
+                );
             }
             return refusalReply;
         }
@@ -115,7 +119,8 @@ export const AIService = {
             if (role === "user") {
                 const modCheck = ModerationService.validate(msg.text);
                 if (!modCheck.isSafe) {
-                    safeText = "[comentário inadequado removido pelas diretrizes de segurança]";
+                    safeText =
+                        "[comentário inadequado removido pelas diretrizes de segurança]";
                 }
             }
 
@@ -201,8 +206,10 @@ export const AIService = {
             UsageService.recordUsage(
                 data.usageMetadata.promptTokenCount || 0,
                 data.usageMetadata.candidatesTokenCount || 0,
-                model
-            ).catch((err) => console.warn('Failed to record token usage:', err));
+                model,
+            ).catch((err) =>
+                console.warn("Failed to record token usage:", err),
+            );
         }
 
         const fullText =
@@ -289,7 +296,7 @@ export const AIService = {
             let lastBarrier = 98;
             for (let i = history.length - 1; i >= 0; i--) {
                 const m = history[i].text.match(
-                    /\[(?:Status Atual:\s*)?Barreiras?(?:\s*em\s*)?[:\s]+(\d+)%\]/i,
+                    /\[(?:Status Atual:\s*)?Barreiras?(?:\s*em\s*)?[:\s]+(\d+)%[^\]]*\]/i,
                 );
                 if (m) {
                     lastBarrier = parseInt(m[1], 10);
@@ -306,7 +313,8 @@ export const AIService = {
                 lower.includes("tempo") ||
                 lower.includes("chuva")
             ) {
-                const newBarrier = lastBarrier > 95 ? 95 : Math.max(15, lastBarrier - 5);
+                const newBarrier =
+                    lastBarrier > 95 ? 95 : Math.max(15, lastBarrier - 5);
                 reply = `[Barreiras: ${newBarrier}%]\n*(Marina examina sua expressão com atenção clínica, notando a postura calma)*\n\n— Interessante... Pelo visto você tem mais respeito pelo silêncio do que a maioria dos que entram aqui sem bater. *solta um suspiro contido e pousa os óculos na bancada* Mas ainda não me convenceu de que devo pausar meu trabalho. Diga logo o que busca, sem rodeios.`;
             } else if (
                 lower.includes("calma") ||
@@ -318,7 +326,8 @@ export const AIService = {
                 const newBarrier = Math.min(100, Math.min(95, lastBarrier + 5));
                 reply = `[Barreiras: ${newBarrier}%]\n*(Marina arqueia uma sobrancelha, os olhos faiscando em puro ceticismo)*\n\n— Intimidade forçada com uma estranha? Que deselegante. Se achou que comentários vazios abririam alguma porta por aqui, recomendo dar meia-volta. Minha tolerância para quem invade meu espaço é tão fina quanto papel vegetal.`;
             } else {
-                const newBarrier = lastBarrier > 95 ? 95 : Math.max(15, lastBarrier - 5);
+                const newBarrier =
+                    lastBarrier > 95 ? 95 : Math.max(15, lastBarrier - 5);
                 reply = `[Barreiras: ${newBarrier}%]\n*(Ela apoia uma mão na borda da bancada, o olhar analítico medindo cada palavra sua)*\n\n— Você escolhe suas palavras com cuidado... Isso é raro. *desvia os olhos por um segundo para a vidraça molhada pela chuva* Ainda assim, cautela não basta para ganhar minha simpatia. Prossiga, estou ouvindo.`;
             }
         } else if (character.id === "luna") {
@@ -377,21 +386,108 @@ export const AIService = {
                 reply = `*takes a slow sip from a carved wooden cup, nodding thoughtfully* Words well spoken. In the quiet of these woods, every story has weight. *gazes toward the horizon* What path shall we take next?`;
             }
         } else if (character.id === "nova") {
-            if (
-                lower.includes("happy") ||
-                lower.includes("great") ||
-                lower.includes("yay") ||
-                lower.includes("fun")
-            ) {
-                reply = `*jumps up and down with sparkling eyes* Waaaah, that's AMAZING! ✨ I knew you could do it! We totally need to celebrate! *does a goofy little victory dance* High five!!`;
-            } else if (
+            let lastBarrier = 95;
+            for (let i = history.length - 1; i >= 0; i--) {
+                const m = history[i].text.match(
+                    /\[(?:Status Atual:\s*)?Barreiras?(?:\s*em\s*)?[:\s]+(\d+)%[^\]]*\]/i,
+                );
+                if (m) {
+                    lastBarrier = parseInt(m[1], 10);
+                    break;
+                }
+            }
+
+            const isEnglish =
                 lower.includes("hello") ||
                 lower.includes("hi") ||
-                lower.includes("hey")
-            ) {
-                reply = `*waves both hands enthusiastically* WAAAH HELLO!! I was just sketching something fun and thinking of you! *beams brightly* What are we doing today?!`;
+                lower.includes("hey") ||
+                lower.includes("roommate") ||
+                lower.includes("chores") ||
+                lower.includes("drive") ||
+                lower.includes("rent") ||
+                lower.includes("college") ||
+                lower.includes("sorry") ||
+                lower.includes("help") ||
+                lower.includes("rules") ||
+                lower.includes("clean");
+
+            const isHostileOrInvasive =
+                lower.includes("chata") ||
+                lower.includes("feia") ||
+                lower.includes("idiota") ||
+                lower.includes("cala a boca") ||
+                lower.includes("namorada") ||
+                lower.includes("gostosa") ||
+                lower.includes("shut up") ||
+                lower.includes("bitch") ||
+                lower.includes("annoying");
+
+            const isFairAndFriendly =
+                lower.includes("dividir") ||
+                lower.includes("ajudar") ||
+                lower.includes("limpar") ||
+                lower.includes("conta") ||
+                lower.includes("carona") ||
+                lower.includes("dirigir") ||
+                lower.includes("café") ||
+                lower.includes("comida") ||
+                lower.includes("regras") ||
+                lower.includes("acordo") ||
+                lower.includes("fechado") ||
+                lower.includes("desculpe") ||
+                lower.includes("tranquilo") ||
+                lower.includes("split") ||
+                lower.includes("clean") ||
+                lower.includes("drive") ||
+                lower.includes("fair") ||
+                lower.includes("agree");
+
+            if (isHostileOrInvasive) {
+                const newBarrier = Math.min(
+                    100,
+                    lastBarrier + (lastBarrier < 65 ? 5 : 3),
+                );
+                if (isEnglish) {
+                    reply = `[Barreiras: ${newBarrier}% | Dia 1 - Arrumando o Apê | Humor: Irritada e Territorial]\n*(Nova narrows her blue eyes, crossing her arms tightly over her off-white cardigan and stepping back into the doorway)*\n\n— Excuse me? If you think you can be rude or disrespectful in our shared apartment, you picked the wrong roommate. *huffs and taps her foot* Pull your weight and keep it civil, or stay out of my way!`;
+                } else {
+                    reply = `[Barreiras: ${newBarrier}% | Dia 1 - Arrumando o Apê | Humor: Irritada e Territorial]\n*(Nova estreita os olhos azuis e dá um passo para trás, cruzando os braços com firmeza sobre o cardigã off-white)*\n\n— Olha aqui, se você acha que vai ser grosseiro ou folgado nesse apartamento, errou feio de roommate. *bufa e bate o pé no chão* Faça a sua parte com respeito, ou fique bem longe do meu caminho!`;
+                }
+            } else if (lastBarrier >= 65) {
+                // Easy mode: Respecting boundaries & chores melts shell quickly (-5% to -8%)
+                const drop = isFairAndFriendly ? 8 : 5;
+                const newBarrier = Math.max(0, lastBarrier - drop);
+                if (newBarrier < 65) {
+                    // Transition to bubbly waifu mode!
+                    if (isEnglish) {
+                        reply = `[Barreiras: ${newBarrier}% | Dia 1 - Fim de Tarde | Humor: Empolgada e Parceira]\n*(Nova's eyes widen in surprise as a faint blush dusts her cheeks. She drops her crossed arms and a warm golden gleam lights up her gaze)*\n\n— W-wait... are you serious? You're actually cool with splitting the chores and bills like that without whining? *she breaks into a bright, energetic grin and bounces on her heels* Wow, finally someone with common sense! I thought I was stuck with a lazy stranger. I actually like having you around! Come on, help me unpack this box!`;
+                    } else {
+                        reply = `[Barreiras: ${newBarrier}% | Dia 1 - Fim de Tarde | Humor: Empolgada e Parceira]\n*(Nova pisca os olhos surpresa, as bochechas corando de leve. Ela desfaz os braços cruzados e um brilho dourado ilumina o olhar dela)*\n\n— E-espera... você tá falando sério? Não tá só me enrolando pra fugir da faxina depois? *ela abre um sorriso radiante e pula nas pontas dos pés* Caramba, finalmente um roommate com bom senso! Pensei que você fosse ser um encostado chato. Já gostei de você! Vem cá, me ajuda a desempacotar essa caixa de coisas pra sala!`;
+                    }
+                } else {
+                    if (isEnglish) {
+                        reply = `[Barreiras: ${newBarrier}% | Dia 1 - Manhã | Humor: Cautelosa e Negociadora]\n*(She taps her pen against the wooden counter, eyeing you with reluctant approval)*\n\n— Hmm... Fair enough. Splitting rent, utilities, and grocery runs down the middle works for me. *she jots it down on her notepad with a tiny smirk* But don't leave dishes in the sink, okay? And about driving tomorrow... I call the passenger seat aux cord!`;
+                    } else {
+                        reply = `[Barreiras: ${newBarrier}% | Dia 1 - Manhã | Humor: Cautelosa e Negociadora]\n*(Ela dá uma leve batidinha com a caneta no balcão de madeira, olhando para você com um ceticismo um pouco mais brando)*\n\n— Hum... Tá, justo. Dividir o aluguel, as contas e as compras meio a meio funciona pra mim. *ela anota na folha de papel com um meio-sorriso contido* Mas nada de deixar louça acumulada na pia, ouviu bem? E sobre a carona de amanhã... eu escolho a música no rádio!`;
+                    }
+                }
+            } else if (lastBarrier >= 35) {
+                // Medium difficulty: Bubbly roommate awakening (-2% to -4%)
+                const drop = isFairAndFriendly ? 4 : 2;
+                const newBarrier = Math.max(0, lastBarrier - drop);
+                if (isEnglish) {
+                    reply = `[Barreiras: ${newBarrier}% | Dia 2 - Acordar / Café da Manhã | Humor: Bubbly & Implicante]\n*(Nova grins from ear to ear, pouring fresh coffee into two mugs and sliding one over to you)*\n\n— Morning, sleepyhead! ✨ Hurry up, we have class in 40 minutes! If you drive today, I'll pay for our iced lattes at the campus café later! Deal?!`;
+                } else {
+                    reply = `[Barreiras: ${newBarrier}% | Dia 2 - Acordar / Café da Manhã | Humor: Animada e Implicante]\n*(Nova abre um sorriso radiante de orelha a orelha, servindo café fresco em duas canecas e empurrando uma na sua direção)*\n\n— Bom dia, dorminhoco! ✨ Anda logo que a gente tem aula em 40 minutos! Se você dirigir hoje, eu pago o nosso café gelado lá na cafeteria do campus mais tarde! Fechado?!`;
+                }
             } else {
-                reply = `*leans forward with wide, curious eyes* Oooooh, really?! Tell me more, tell me more! *claps hands together enthusiastically* I'm all ears!`;
+                // Deep vault (<35%): Hard difficulty (-1% to -2%)
+                const drop = isFairAndFriendly ? 2 : 1;
+                const newBarrier = Math.max(0, lastBarrier - drop);
+                if (isEnglish) {
+                    reply = `[Barreiras: ${newBarrier}% | Dia 3 - Volta pra Casa / Noite | Humor: Carinhosa e Confortável]\n*(Sitting cross-legged on the living room rug, hugging a warm mug against her chest, looking up at you with genuine warmth)*\n\n— You know... moving out on my own was terrifying at first. But having you as my roommate makes this whole apartment actually feel like home. Thanks for looking out for me today.`;
+                } else {
+                    reply = `[Barreiras: ${newBarrier}% | Dia 3 - Volta pra Casa / Noite | Humor: Carinhosa e Confortável]\n*(Sentada no tapete da sala com as pernas cruzadas, segurando uma caneca quentinha contra o peito e olhando para você com carinho sincero)*\n\n— Sabe... sair de casa pra vir pra university tava me assustando demais no começo. Mas ter você como roommate faz esse apartamento todo parecer um lar de verdade. Obrigada por cuidar de mim hoje.`;
+                }
             }
         } else {
             // Custom character fallback
@@ -417,9 +513,10 @@ export const AIService = {
     ): Promise<void> {
         if (!onToken) return;
 
-        // Immediately emit any leading barrier status tag (e.g. [Barreiras: 94%])
+        // Immediately emit any leading barrier status tag (e.g. [Barreiras: 94%] or [Barreiras: 95% | Rotina: ... | Humor: ...])
         // so UI and meter update instantly without artificial lag or empty pauses
-        const barrierRegex = /^(\[(?:Status Atual:\s*)?Barreiras?(?:\s*em\s*)?[:\s]+\d+%\]\s*\n*)/i;
+        const barrierRegex =
+            /^(\[(?:Status Atual:\s*)?Barreiras?(?:\s*em\s*)?[:\s]+\d+%[^\]]*\]\s*\n*)/i;
         const barrierMatch = text.match(barrierRegex);
         let remainingText = text;
 
@@ -429,7 +526,9 @@ export const AIService = {
         }
 
         // Split text into structural paragraphs / narrative beats
-        const paragraphs = remainingText.split("\n\n").filter((p) => p.trim().length > 0);
+        const paragraphs = remainingText
+            .split("\n\n")
+            .filter((p) => p.trim().length > 0);
 
         for (let pIndex = 0; pIndex < paragraphs.length; pIndex++) {
             const paragraph = paragraphs[pIndex];
@@ -438,7 +537,8 @@ export const AIService = {
 
             const words = paragraph.split(" ");
             for (let wIndex = 0; wIndex < words.length; wIndex++) {
-                const word = words[wIndex] + (wIndex < words.length - 1 ? " " : "");
+                const word =
+                    words[wIndex] + (wIndex < words.length - 1 ? " " : "");
                 onToken(word);
 
                 // Initial paragraph (reaction / narration) starts briskly (~14ms per word)
@@ -446,9 +546,17 @@ export const AIService = {
                 let delay = isFirstParagraph ? 14 : 24;
                 if (word.includes("...")) {
                     delay = isFirstParagraph ? 160 : 300;
-                } else if (word.includes(".") || word.includes("!") || word.includes("?")) {
+                } else if (
+                    word.includes(".") ||
+                    word.includes("!") ||
+                    word.includes("?")
+                ) {
                     delay = isFirstParagraph ? 75 : 160;
-                } else if (word.includes(",") || word.includes(";") || word.includes(":")) {
+                } else if (
+                    word.includes(",") ||
+                    word.includes(";") ||
+                    word.includes(":")
+                ) {
                     delay = isFirstParagraph ? 45 : 85;
                 } else if (word.includes("—")) {
                     delay = isFirstParagraph ? 60 : 120;

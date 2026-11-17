@@ -7,6 +7,8 @@ import {
   Platform,
   ActivityIndicator,
   Text,
+  StatusBar,
+  BackHandler,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -18,9 +20,10 @@ import { CharacterHeader } from '@/components/chat/CharacterHeader';
 import { MessageBubble } from '@/components/chat/MessageBubble';
 import { ChatInput } from '@/components/chat/ChatInput';
 import { TypingDots } from '@/components/chat/TypingDots';
-import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
+import { MaxContentWidth, Spacing } from '@/constants/theme';
 import { ChatMessage } from '@/types/chat';
-import { getMarinaStageImage } from '@/constants/characters';
+import { getMarinaStageImage, getNovaStageImage } from '@/constants/characters';
+import { RoommateTrackerService } from '@/services/roommateTracker';
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -37,43 +40,61 @@ export default function HomeScreen() {
     clearMessages,
     isLoading,
     currentBarrier,
+    isTextOnlyMode,
   } = useChat();
 
   const isMarina = activeCharacter.id === 'marina' || activeCharacter.id === 'helena';
-  const typingAvatarSource = isMarina
+  const isNova = activeCharacter.id === 'nova';
+  const typingAvatarSource = isTextOnlyMode
+    ? null
+    : isMarina
     ? getMarinaStageImage(currentBarrier ?? 98)
+    : isNova
+    ? getNovaStageImage(currentBarrier ?? 95)
     : activeCharacter.avatarImage;
 
-  // Track which messages represent 5% milestone barrier levels (95%, 90%, 85%, 80%, etc.)
+  // Track which messages represent milestone levels or special sentiment cards
   const milestoneMessageIds = useMemo(() => {
     const ids = new Set<string>();
-    if (!isMarina) return ids;
+    if (isTextOnlyMode) return ids;
 
-    const MILESTONES = [95, 90, 85, 80, 75, 70, 65, 60, 55, 50, 45, 40, 35, 30, 25, 20, 15, 10, 5, 0];
-    const seenMilestones = new Set<number>();
+    if (isMarina) {
+      const MILESTONES = [95, 90, 85, 80, 75, 70, 65, 60, 55, 50, 45, 40, 35, 30, 25, 20, 15, 10, 5, 0];
+      const seenMilestones = new Set<number>();
 
-    for (const msg of messages) {
-      if (msg.sender !== 'character') continue;
-      const match = msg.text.match(
-        /\[(?:Status Atual:\s*)?Barreiras?(?:\s*em\s*)?[:\s]+(\d+)%\]/i
-      );
-      if (!match) continue;
-      const barrier = parseInt(match[1], 10);
+      for (const msg of messages) {
+        if (msg.sender !== 'character') continue;
+        const match = msg.text.match(
+          /\[(?:Status Atual:\s*)?Barreiras?(?:\s*em\s*)?[:\s]+(\d+)%[^\]]*\]/i
+        );
+        if (!match) continue;
+        const barrier = parseInt(match[1], 10);
 
-      // Trigger card image only when hitting or crossing a 5% milestone (95, 90, 85, 80, etc.)
-      for (const m of MILESTONES) {
-        if (barrier <= m && !seenMilestones.has(m)) {
+        // Trigger card image only when hitting or crossing a 5% milestone (95, 90, 85, 80, etc.)
+        for (const m of MILESTONES) {
+          if (barrier <= m && !seenMilestones.has(m)) {
+            ids.add(msg.id);
+            seenMilestones.add(m);
+            break;
+          }
+        }
+      }
+    } else if (isNova) {
+      // Zero-token sentiment & location card tracking for Nova!
+      for (const msg of messages) {
+        if (msg.sender !== 'character') continue;
+        const result = RoommateTrackerService.shouldShowNovaCard(msg.id, messages);
+        if (result.showCard) {
           ids.add(msg.id);
-          seenMilestones.add(m);
-          break;
         }
       }
     }
+
     return ids;
-  }, [messages, isMarina]);
+  }, [messages, isMarina, isNova, isTextOnlyMode]);
 
   const renderFormattedStream = (text: string) => {
-    const cleaned = text.replace(/\[(?:Status Atual:\s*)?Barreiras?(?:\s*em\s*)?[:\s]+\d+%\]\s*/i, '');
+    const cleaned = text.replace(/\[(?:Status Atual:\s*)?Barreiras?(?:\s*em\s*)?[:\s]+\d+%[^\]]*\]\s*/i, '');
     const parts = cleaned.split(/(\*[^*]+\*)/g);
     return parts.map((part, index) => {
       if (part.startsWith('*') && part.endsWith('*')) {
@@ -102,6 +123,20 @@ export default function HomeScreen() {
     }
   }, [messages.length, streamingMessage]);
 
+  useEffect(() => {
+    const onBackPress = () => {
+      if (router.canGoBack()) {
+        router.back();
+      } else {
+        router.push('/explore');
+      }
+      return true;
+    };
+
+    const backHandler = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+    return () => backHandler.remove();
+  }, [router]);
+
   if (isLoading) {
     return (
       <View style={[styles.loadingContainer, { backgroundColor: theme.background }]}>
@@ -114,13 +149,21 @@ export default function HomeScreen() {
     <SafeAreaView edges={['top']} style={[styles.safeArea, { backgroundColor: theme.background }]}>
       <KeyboardAvoidingView
         style={styles.keyboardContainer}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'android' ? (StatusBar.currentHeight ?? 0) : 0}>
         <View style={styles.centerWrapper}>
           {/* Active Companion Header */}
           <CharacterHeader
             character={activeCharacter}
             onClearChat={clearMessages}
             onOpenRoster={() => router.push('/explore')}
+            onBack={() => {
+              if (router.canGoBack()) {
+                router.back();
+              } else {
+                router.push('/explore');
+              }
+            }}
           />
 
           {/* Chat Messages */}
@@ -145,23 +188,28 @@ export default function HomeScreen() {
             ListFooterComponent={
               isTyping ? (
                 <View style={styles.typingContainer}>
-                  <View
-                    style={[
-                      styles.avatarBubble,
-                      {
-                        borderColor: activeCharacter.accentColor,
-                        backgroundColor: theme.backgroundElement,
-                      },
-                    ]}>
-                    {typingAvatarSource ? (
-                      <Image
-                        source={typingAvatarSource}
-                        style={styles.avatarImage}
-                        contentFit="cover"
-                      />
-                    ) : (
-                      <Text style={styles.avatarEmoji}>{activeCharacter.avatar}</Text>
-                    )}
+                  <View style={styles.senderHeader}>
+                    <View
+                      style={[
+                        styles.avatarIconSmall,
+                        {
+                          borderColor: activeCharacter.accentColor,
+                          backgroundColor: theme.backgroundElement,
+                        },
+                      ]}>
+                      {typingAvatarSource ? (
+                        <Image
+                          source={typingAvatarSource}
+                          style={styles.avatarIconImage}
+                          contentFit="cover"
+                        />
+                      ) : (
+                        <Text style={styles.avatarIconEmoji}>{activeCharacter.avatar}</Text>
+                      )}
+                    </View>
+                    <Text style={[styles.senderName, { color: activeCharacter.accentColor }]}>
+                      {activeCharacter.name}
+                    </Text>
                   </View>
                   <View
                     style={[
@@ -220,7 +268,7 @@ const styles = StyleSheet.create({
     maxWidth: MaxContentWidth,
     width: '100%',
     alignSelf: 'center',
-    paddingBottom: BottomTabInset,
+    paddingBottom: 0,
   },
   loadingContainer: {
     flex: 1,
@@ -234,29 +282,38 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.two,
   },
   typingContainer: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
+    alignItems: 'flex-start',
     paddingHorizontal: Spacing.three,
     marginVertical: Spacing.one,
+    width: '100%',
   },
-  avatarBubble: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+  senderHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 4,
+    paddingLeft: Spacing.half,
+  },
+  avatarIconSmall: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
     borderWidth: 1.5,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: Spacing.two,
-    marginBottom: Spacing.one,
     overflow: 'hidden',
   },
-  avatarImage: {
+  avatarIconImage: {
     width: '100%',
     height: '100%',
-    borderRadius: 16,
+    borderRadius: 11,
   },
-  avatarEmoji: {
-    fontSize: 18,
+  avatarIconEmoji: {
+    fontSize: 12,
+  },
+  senderName: {
+    fontSize: 12,
+    fontWeight: '700',
+    marginLeft: 6,
   },
   typingBubble: {
     maxWidth: '82%',
