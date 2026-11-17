@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useMemo } from 'react';
+import React, { useRef, useEffect, useMemo, useState } from 'react';
 import {
   StyleSheet,
   View,
@@ -20,6 +20,9 @@ import { CharacterHeader } from '@/components/chat/CharacterHeader';
 import { MessageBubble } from '@/components/chat/MessageBubble';
 import { ChatInput } from '@/components/chat/ChatInput';
 import { TypingDots } from '@/components/chat/TypingDots';
+import { ChessInvitationModal } from '@/components/chess/ChessInvitationModal';
+import { ChessGameModal } from '@/components/chess/ChessGameModal';
+import { ChessDifficulty } from '@/services/chessEngine';
 import { MaxContentWidth, Spacing } from '@/constants/theme';
 import { ChatMessage } from '@/types/chat';
 import { getMarinaStageImage, getNovaStageImage } from '@/constants/characters';
@@ -29,6 +32,10 @@ export default function HomeScreen() {
   const router = useRouter();
   const theme = useTheme();
   const flatListRef = useRef<FlatList<ChatMessage>>(null);
+
+  const [chessInviteVisible, setChessInviteVisible] = useState(false);
+  const [chessGameVisible, setChessGameVisible] = useState(false);
+  const [chessDifficulty, setChessDifficulty] = useState<ChessDifficulty>('medium');
 
   const {
     activeCharacter,
@@ -137,6 +144,32 @@ export default function HomeScreen() {
     return () => backHandler.remove();
   }, [router]);
 
+  const handleSendMessage = (text: string) => {
+    sendMessage(text);
+
+    // Detect chess challenge trigger: "vamos jogar uma partida?", "bora jogar xadrez?", etc.
+    const normalized = text.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    const isChessTrigger =
+      normalized.includes('jogar uma partida') ||
+      normalized.includes('jogar xadrez') ||
+      normalized.includes('partida de xadrez') ||
+      normalized.includes('bora jogar') ||
+      normalized.includes('quer jogar') ||
+      normalized.includes('vamos jogar');
+
+    if (isChessTrigger && isNova) {
+      setTimeout(() => {
+        setChessInviteVisible(true);
+      }, 700);
+    }
+  };
+
+  const handleStartChess = (diff: ChessDifficulty) => {
+    setChessDifficulty(diff);
+    setChessInviteVisible(false);
+    setChessGameVisible(true);
+  };
+
   if (isLoading) {
     return (
       <View style={[styles.loadingContainer, { backgroundColor: theme.background }]}>
@@ -157,6 +190,7 @@ export default function HomeScreen() {
             character={activeCharacter}
             onClearChat={clearMessages}
             onOpenRoster={() => router.push('/explore')}
+            onOpenChess={isNova ? () => setChessInviteVisible(true) : undefined}
             onBack={() => {
               if (router.canGoBack()) {
                 router.back();
@@ -246,12 +280,32 @@ export default function HomeScreen() {
 
           {/* Chat Input Bar */}
           <ChatInput
-            onSendMessage={sendMessage}
+            onSendMessage={handleSendMessage}
             disabled={isTyping}
             accentColor={activeCharacter.accentColor}
           />
         </View>
       </KeyboardAvoidingView>
+
+      {/* Chess Match Invitation Modal */}
+      <ChessInvitationModal
+        visible={chessInviteVisible}
+        character={activeCharacter}
+        currentBarrier={currentBarrier ?? activeCharacter.initialBarrier ?? 95}
+        onClose={() => setChessInviteVisible(false)}
+        onStartGame={handleStartChess}
+      />
+
+      {/* Chess Gameplay Modal */}
+      {chessGameVisible && (
+        <ChessGameModal
+          visible={chessGameVisible}
+          character={activeCharacter}
+          currentBarrier={currentBarrier ?? activeCharacter.initialBarrier ?? 95}
+          initialDifficulty={chessDifficulty}
+          onClose={() => setChessGameVisible(false)}
+        />
+      )}
     </SafeAreaView>
   );
 }

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Alert, Modal } from 'react-native';
 import { Image } from 'expo-image';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { Character } from '@/types/chat';
 import { Spacing } from '@/constants/theme';
@@ -20,9 +20,16 @@ interface Props {
   onClearChat: () => void;
   onOpenRoster?: () => void;
   onBack?: () => void;
+  onOpenChess?: () => void;
 }
 
-export function CharacterHeader({ character, onClearChat, onOpenRoster, onBack }: Props) {
+export function CharacterHeader({
+  character,
+  onClearChat,
+  onOpenRoster,
+  onBack,
+  onOpenChess,
+}: Props) {
   const router = useRouter();
   const theme = useTheme();
   const { currentBarrier, isTextOnlyMode } = useChat();
@@ -225,6 +232,15 @@ export function CharacterHeader({ character, onClearChat, onOpenRoster, onBack }
         </View>
 
         <View style={styles.actions}>
+          {onOpenChess && (
+            <TouchableOpacity
+              onPress={onOpenChess}
+              style={[styles.iconButton, { backgroundColor: theme.backgroundElement }]}
+              accessibilityLabel="Desafiar para partida de xadrez">
+              <MaterialCommunityIcons name="chess-knight" size={19} color={character.accentColor} />
+            </TouchableOpacity>
+          )}
+
           <TouchableOpacity
             onPress={() => setUsageModalVisible(true)}
             style={[styles.iconButton, { backgroundColor: theme.backgroundElement }]}
