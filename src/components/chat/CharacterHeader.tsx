@@ -8,6 +8,7 @@ import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useChat } from '@/context/ChatContext';
 import { UsageModal } from './UsageModal';
+import { SaveSlotsModal } from './SaveSlotsModal';
 import {
   getMarinaStageImage,
   getMarinaStageInfo,
@@ -34,6 +35,7 @@ export function CharacterHeader({
   const theme = useTheme();
   const { currentBarrier, isTextOnlyMode } = useChat();
   const [usageModalVisible, setUsageModalVisible] = useState(false);
+  const [saveModalVisible, setSaveModalVisible] = useState(false);
   const [imageModalVisible, setImageModalVisible] = useState(false);
 
   const handleBack = () => {
@@ -48,11 +50,11 @@ export function CharacterHeader({
 
   const handleClearPress = () => {
     Alert.alert(
-      'Reset Conversation',
-      `Are you sure you want to clear your conversation history with ${character.name}?`,
+      'Nova Conversa',
+      `Deseja iniciar uma nova conversa com ${character.name}? Seu progresso atual continua salvo com segurança em um slot e você poderá voltar a ele a qualquer momento.`,
       [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Reset', style: 'destructive', onPress: onClearChat },
+        { text: 'Cancelar', style: 'cancel' },
+        { text: 'Começar Nova Conversa', onPress: onClearChat },
       ]
     );
   };
@@ -242,6 +244,13 @@ export function CharacterHeader({
           )}
 
           <TouchableOpacity
+            onPress={() => setSaveModalVisible(true)}
+            style={[styles.iconButton, { backgroundColor: theme.backgroundElement }]}
+            accessibilityLabel="Gerenciar saves e linhas do tempo">
+            <Ionicons name="bookmark" size={17} color={character.accentColor} />
+          </TouchableOpacity>
+
+          <TouchableOpacity
             onPress={() => setUsageModalVisible(true)}
             style={[styles.iconButton, { backgroundColor: theme.backgroundElement }]}
             accessibilityLabel="Ver consumo de tokens e limites da API">
@@ -251,8 +260,8 @@ export function CharacterHeader({
           <TouchableOpacity
             onPress={handleClearPress}
             style={[styles.iconButton, { backgroundColor: theme.backgroundElement }]}
-            accessibilityLabel="Limpar histórico">
-            <Ionicons name="trash-outline" size={18} color={theme.textSecondary} />
+            accessibilityLabel="Começar nova conversa">
+            <Ionicons name="add-circle-outline" size={19} color={theme.textSecondary} />
           </TouchableOpacity>
         </View>
       </View>
@@ -338,6 +347,12 @@ export function CharacterHeader({
       <UsageModal
         visible={usageModalVisible}
         onClose={() => setUsageModalVisible(false)}
+      />
+
+      {/* Save Slots & Timelines Modal */}
+      <SaveSlotsModal
+        visible={saveModalVisible}
+        onClose={() => setSaveModalVisible(false)}
       />
 
       {/* Full-size posture viewer modal */}

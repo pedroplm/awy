@@ -33,6 +33,7 @@ export function NewCharacterModal({ visible, onClose, onCreate }: Props) {
   const [personality, setPersonality] = useState('');
   const [greeting, setGreeting] = useState('');
   const [systemPrompt, setSystemPrompt] = useState('');
+  const [lore, setLore] = useState('');
   const [accentColor, setAccentColor] = useState(COLOR_OPTIONS[0]);
 
   const handleSave = () => {
@@ -49,6 +50,7 @@ export function NewCharacterModal({ visible, onClose, onCreate }: Props) {
       systemPrompt:
         systemPrompt.trim() ||
         `You are ${name.trim()}, a supportive and authentic AI companion in AWY. Use asterisk roleplay actions and speak directly to the user.`,
+      lore: lore.trim() || undefined,
       accentColor,
       tags: ['Custom', 'Companion'],
     });
@@ -58,6 +60,7 @@ export function NewCharacterModal({ visible, onClose, onCreate }: Props) {
     setPersonality('');
     setGreeting('');
     setSystemPrompt('');
+    setLore('');
     onClose();
   };
 
@@ -206,6 +209,27 @@ export function NewCharacterModal({ visible, onClose, onCreate }: Props) {
               placeholderTextColor={theme.textSecondary}
               value={systemPrompt}
               onChangeText={setSystemPrompt}
+              multiline
+            />
+
+            {/* Lore & Knowledge Base (RAG) */}
+            <Text style={[styles.label, { color: theme.textSecondary }]}>
+              Character Knowledge & Lore (RAG Memory - Optional)
+            </Text>
+            <TextInput
+              style={[
+                styles.input,
+                styles.multilineInput,
+                {
+                  backgroundColor: theme.backgroundElement,
+                  color: theme.text,
+                  borderColor: theme.backgroundSelected,
+                },
+              ]}
+              placeholder="Facts, world-building rules or secrets this character should know (one per line)..."
+              placeholderTextColor={theme.textSecondary}
+              value={lore}
+              onChangeText={setLore}
               multiline
             />
 

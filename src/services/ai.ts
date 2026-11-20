@@ -1,6 +1,8 @@
 import { ModerationService } from "@/services/moderation";
 import { UsageService } from "@/services/usage";
+import { RagService } from "@/services/rag";
 import { Character, ChatMessage } from "@/types/chat";
+import { MemoryEntry } from "@/types/rag";
 
 interface GenerateOptions {
     character: Character;
@@ -13,8 +15,7 @@ interface GenerateOptions {
 export const AIService = {
     /**
      * Generates a real-time roleplay response for the character.
-     * If an API key is provided via env vars (EXPO_PUBLIC_GEMINI_API_KEY or EXPO_PUBLIC_OPENAI_API_KEY),
-     * it connects to the LLM. Otherwise, it uses an expressive companion roleplay engine.
+     * Uses RAG memory retrieval for both cloud models and local fallback.
      */
     async generateResponse({
         character,
@@ -43,6 +44,21 @@ export const AIService = {
             return refusalReply;
         }
 
+        // Universal RAG Retrieval: fetch relevant memories for this specific character
+        let relevantMemories: MemoryEntry[] = [];
+        let memoryContext = "";
+        try {
+            relevantMemories = await RagService.retrieveRelevantMemories(
+                character.id,
+                userMessage,
+            );
+            if (relevantMemories.length > 0) {
+                memoryContext = RagService.formatMemoriesForPrompt(relevantMemories);
+            }
+        } catch (memErr) {
+            console.warn("Failed to retrieve RAG memories:", memErr);
+        }
+
         const geminiKey = process.env.EXPO_PUBLIC_GEMINI_API_KEY;
         const openaiKey = process.env.EXPO_PUBLIC_OPENAI_API_KEY;
 
@@ -53,6 +69,7 @@ export const AIService = {
                     character,
                     history,
                     userMessage,
+                    memoryContext,
                     onToken,
                     onPause,
                 );
@@ -69,6 +86,7 @@ export const AIService = {
                     character,
                     history,
                     userMessage,
+                    memoryContext,
                     onToken,
                     onPause,
                 );
@@ -80,11 +98,12 @@ export const AIService = {
             }
         }
 
-        // Default built-in roleplay companion engine with real-time streaming
+        // Default built-in roleplay companion engine with RAG support & real-time streaming
         return this.generateCompanionRoleplay(
             character,
             history,
             userMessage,
+            relevantMemories,
             onToken,
             onPause,
         );
@@ -95,6 +114,7 @@ export const AIService = {
         character: Character,
         history: ChatMessage[],
         userMessage: string,
+        memoryContext?: string,
         onToken?: (token: string) => void,
         onPause?: (isThinking: boolean) => void,
     ): Promise<string> {
@@ -147,11 +167,15 @@ export const AIService = {
             validHistory.push({ role: "user", parts: [{ text: userMessage }] });
         }
 
+        const systemInstructionText = memoryContext
+            ? `${character.systemPrompt}\n\n${memoryContext}\n\n[REGRA DE OURO DO ROLEPLAY (ANTI-METAGAMING): Você JAMAIS lê pensamentos do usuário. Textos entre asteriscos que descrevam pensamentos, intenções ocultas ou reflexões internas do usuário são COMPLETAMENTE INAUDÍVEIS para sua personagem. Reaja APENAS às falas ditas em voz alta e a reações físicas visíveis/audíveis como suspiros ou hesitações. Nunca cite ou mencione nada que o usuário apenas pensou silenciosamente.]`
+            : `${character.systemPrompt}\n\n[REGRA DE OURO DO ROLEPLAY (ANTI-METAGAMING): Você JAMAIS lê pensamentos do usuário. Textos entre asteriscos que descrevam pensamentos, intenções ocultas ou reflexões internas do usuário são COMPLETAMENTE INAUDÍVEIS para sua personagem. Reaja APENAS às falas ditas em voz alta e a reações físicas visíveis/audíveis como suspiros ou hesitações. Nunca cite ou mencione nada que o usuário apenas pensou silenciosamente.]`;
+
         const payload = {
             system_instruction: {
                 parts: [
                     {
-                        text: `${character.systemPrompt}\n\n[REGRA DE OURO DO ROLEPLAY (ANTI-METAGAMING): Você JAMAIS lê pensamentos do usuário. Textos entre asteriscos que descrevam pensamentos, intenções ocultas ou reflexões internas do usuário são COMPLETAMENTE INAUDÍVEIS para sua personagem. Reaja APENAS às falas ditas em voz alta e a reações físicas visíveis/audíveis como suspiros ou hesitações. Nunca cite ou mencione nada que o usuário apenas pensou silenciosamente.]`,
+                        text: systemInstructionText,
                     },
                 ],
             },
@@ -235,11 +259,16 @@ export const AIService = {
         character: Character,
         history: ChatMessage[],
         userMessage: string,
+        memoryContext?: string,
         onToken?: (token: string) => void,
         onPause?: (isThinking: boolean) => void,
     ): Promise<string> {
+        const systemContent = memoryContext
+            ? `${character.systemPrompt}\n\n${memoryContext}`
+            : character.systemPrompt;
+
         const messages = [
-            { role: "system", content: character.systemPrompt },
+            { role: "system", content: systemContent },
             ...history.slice(-10).map((msg) => ({
                 role: msg.sender === "user" ? "user" : "assistant",
                 content: msg.text,
@@ -280,12 +309,13 @@ export const AIService = {
     },
 
     /**
-     * Expressive roleplay fallback engine tailored per companion character
+     * Expressive roleplay fallback engine tailored per companion character with RAG support
      */
     async generateCompanionRoleplay(
         character: Character,
         history: ChatMessage[],
         userMessage: string,
+        relevantMemories: MemoryEntry[] = [],
         onToken?: (token: string) => void,
         onPause?: (isThinking: boolean) => void,
     ): Promise<string> {
@@ -480,18 +510,56 @@ export const AIService = {
                     reply = `[Barreiras: ${newBarrier}% | Dia 2 - Acordar / Café da Manhã | Humor: Animada e Implicante]\n*(Nova abre um sorriso radiante de orelha a orelha, servindo café fresco em duas canecas e empurrando uma na sua direção)*\n\n— Bom dia, dorminhoco! ✨ Anda logo que a gente tem aula em 40 minutos! Se você dirigir hoje, eu pago o nosso café gelado lá na cafeteria do campus mais tarde! Fechado?!`;
                 }
             } else {
-                // Deep vault (<35%): Hard difficulty (-1% to -2%)
+                // Deep vault (<35%): Hard difficulty (-1% to -2%) with rich post-wall scene variation & RAG memory
                 const drop = isFairAndFriendly ? 2 : 1;
                 const newBarrier = Math.max(0, lastBarrier - drop);
-                if (isEnglish) {
-                    reply = `[Barreiras: ${newBarrier}% | Dia 3 - Volta pra Casa / Noite | Humor: Carinhosa e Confortável]\n*(Sitting cross-legged on the living room rug, hugging a warm mug against her chest, looking up at you with genuine warmth)*\n\n— You know... moving out on my own was terrifying at first. But having you as my roommate makes this whole apartment actually feel like home. Thanks for looking out for me today.`;
+
+                const isFoodQuery = lower.includes("comida") || lower.includes("comer") || lower.includes("pizza") || lower.includes("prato") || lower.includes("food");
+                const isRulesQuery = lower.includes("regra") || lower.includes("acordo") || lower.includes("dividir") || lower.includes("tarefa") || lower.includes("limpar");
+
+                if (isFoodQuery) {
+                    if (isEnglish) {
+                        reply = `[Barreiras: ${newBarrier}% | Dia 3 - Cozinha / Jantar | Humor: Carinhosa e Animada]\n*(Nova chuckles softly, brushing a strand of her blonde hair behind her ear and leaning on the kitchen counter)*\n\n— You know mine by now: piping hot four-cheese pizza! It's the ultimate post-class survival food! But what about you? What are you in the mood for us to order for the apartment tonight?`;
+                    } else {
+                        reply = `[Barreiras: ${newBarrier}% | Dia 3 - Cozinha / Jantar | Humor: Carinhosa e Animada]\n*(Nova dá uma risadinha gostosa, ajeitando as mechas do wolf-cut atrás da orelha e se apoiando no balcão da cozinha)*\n\n— A minha você já deve ter decorado: pizza de quatro queijos bem quentinha! É o combustível oficial pra sobreviver às aulas da universidade! Mas e aí... o que você tá querendo que a gente peça pro apê hoje?`;
+                    }
+                } else if (isRulesQuery) {
+                    if (isEnglish) {
+                        reply = `[Barreiras: ${newBarrier}% | Dia 3 - Sala do Apê | Humor: Cúmplice e Divertida]\n*(Nova pulls her knees up on the sofa with a warm, mischievous grin)*\n\n— Of course I remember! Fifty-fifty split on the bills, keeping the living room clean, and you putting up with my indie music in the car! Honestly, you turned out to be the best roommate ever.`;
+                    } else {
+                        reply = `[Barreiras: ${newBarrier}% | Dia 3 - Sala do Apê | Humor: Cúmplice e Divertida]\n*(Nova senta no sofá abraçando os joelhos com um sorriso cúmplice e divertido)*\n\n— É claro que eu lembro de tudo! Divisão 50/50 nas contas, sala em ordem e você aguentando minhas playlists indie no carro! Confesso que no começo achei que você ia ser um mala... mas você é o melhor roommate que eu poderia ter pedido.`;
+                    }
                 } else {
-                    reply = `[Barreiras: ${newBarrier}% | Dia 3 - Volta pra Casa / Noite | Humor: Carinhosa e Confortável]\n*(Sentada no tapete da sala com as pernas cruzadas, segurando uma caneca quentinha contra o peito e olhando para você com carinho sincero)*\n\n— Sabe... sair de casa pra vir pra university tava me assustando demais no começo. Mas ter você como roommate faz esse apartamento todo parecer um lar de verdade. Obrigada por cuidar de mim hoje.`;
+                    const sceneVariant = Math.floor(Date.now() / 1000) % 3;
+                    if (sceneVariant === 0) {
+                        if (isEnglish) {
+                            reply = `[Barreiras: ${newBarrier}% | Dia 3 - Volta pra Casa / Noite | Humor: Carinhosa e Confortável]\n*(Sitting cross-legged on the living room rug, hugging a warm mug against her chest, looking up at you with genuine warmth)*\n\n— You know... moving out on my own was terrifying at first. But having you as my roommate makes this whole apartment actually feel like home. Thanks for looking out for me today.`;
+                        } else {
+                            reply = `[Barreiras: ${newBarrier}% | Dia 3 - Volta pra Casa / Noite | Humor: Carinhosa e Confortável]\n*(Sentada no tapete da sala com as pernas cruzadas, segurando uma caneca quentinha contra o peito e olhando para você com carinho sincero)*\n\n— Sabe... sair de casa pra vir pra university tava me assustando demais no começo. Mas ter você como roommate faz esse apartamento todo parecer um lar de verdade. Obrigada por cuidar de mim hoje.`;
+                        }
+                    } else if (sceneVariant === 1) {
+                        if (isEnglish) {
+                            reply = `[Barreiras: ${newBarrier}% | Dia 3 - Noite na Varanda | Humor: Relaxada e Conectada]\n*(Nova leans against the window looking out at the city lights, one earphone handed out toward you)*\n\n— It's so peaceful right now. Want to listen to this song with me? Having you around makes all the university stress completely fade away.`;
+                        } else {
+                            reply = `[Barreiras: ${newBarrier}% | Dia 3 - Noite na Janela | Humor: Relaxada e Conectada]\n*(Nova se apoia no parapeito da janela olhando as luzes da cidade, estendendo um lado do fone de ouvido na sua direção)*\n\n— O clima tá tão gostoso agora à noite. Quer ouvir essa música comigo? Ter você por perto faz todo o estresse da faculdade simplesmente sumir.`;
+                        }
+                    } else {
+                        if (isEnglish) {
+                            reply = `[Barreiras: ${newBarrier}% | Dia 3 - Cozinha / Noite | Humor: Carinhosa e Espoletada]\n*(Nova pours two cups of hot chocolate, sliding one to you with a bright, sunny grin)*\n\n— Hot chocolate delivery! Don't study too hard, okay? We survive this semester together or we don't survive at all! *winks playfully*`;
+                        } else {
+                            reply = `[Barreiras: ${newBarrier}% | Dia 3 - Cozinha / Noite | Humor: Carinhosa e Espoletada]\n*(Nova serve duas xícaras de chocolate quente e desliza uma pra você com um sorriso brilhante)*\n\n— Entrega especial de chocolate quente! Nada de se matar de estudar até tarde, combinado? A gente sobrevive a esse semestre juntos ou ninguém sobrevive! *pisca de brincadeira*`;
+                        }
+                    }
                 }
             }
         } else {
-            // Custom character fallback
-            reply = `*looks at you attentively, reflecting on your words* "${userMessage}"... That resonates with me. *smiles warmly* I am always here with you. What would you like to explore next?`;
+            // Custom character fallback with RAG context
+            if (relevantMemories.length > 0) {
+                const topMem = relevantMemories[0];
+                reply = `*looks at you attentively with deep recognition, remembering our past moments* "${topMem.content}"... I keep that in mind with great care. *smiles warmly* I am always here with you. What would you like to explore next?`;
+            } else {
+                reply = `*looks at you attentively, reflecting on your words* "${userMessage}"... That resonates with me. *smiles warmly* I am always here with you. What would you like to explore next?`;
+            }
         }
 
         if (onToken) {

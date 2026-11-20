@@ -12,6 +12,7 @@ export interface Character {
   initialBarrier?: number;
   hasBarrierMeter?: boolean;
   avatarImage?: any;
+  lore?: string;
 }
 
 export interface ChatMessage {
