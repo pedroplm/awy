@@ -6,6 +6,7 @@ import { AIService } from '@/services/ai';
 import { RagService } from '@/services/rag';
 import { SaveService } from '@/services/save';
 import { SaveSlotMeta } from '@/types/save';
+import { MemoryEntry, MemoryCategory } from '@/types/rag';
 
 interface ChatContextType {
   characters: Character[];
@@ -34,6 +35,14 @@ interface ChatContextType {
   exportSaveSlot: (slotId: string) => Promise<string>;
   importSaveSlot: (jsonString: string) => Promise<SaveSlotMeta>;
   refreshSaveSlots: () => Promise<void>;
+  // Memory & Diary management
+  memories: MemoryEntry[];
+  unsummarizedCount: number;
+  refreshMemories: () => Promise<void>;
+  addMemory: (content: string, category?: MemoryCategory, importance?: number) => Promise<MemoryEntry>;
+  updateMemory: (memoryId: string, updates: Partial<Pick<MemoryEntry, 'content' | 'category' | 'importance'>>) => Promise<void>;
+  deleteMemory: (memoryId: string) => Promise<void>;
+  summarizeRecentMessages: (force?: boolean) => Promise<{ addedCount: number; message: string }>;
 }
 
 const ChatContext = createContext<ChatContextType | undefined>(undefined);
@@ -49,6 +58,8 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
   const [isTextOnlyMode, setIsTextOnlyMode] = useState<boolean>(false);
   const [saveSlots, setSaveSlots] = useState<SaveSlotMeta[]>([]);
   const [activeSaveSlotId, setActiveSaveSlotId] = useState<string | null>(null);
+  const [memories, setMemories] = useState<MemoryEntry[]>([]);
+  const [unsummarizedCount, setUnsummarizedCount] = useState<number>(0);
 
   // Initialize characters, active character, and preferences
   useEffect(() => {
@@ -86,10 +97,17 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
           setMessages(loadedMessages);
         }
 
+        // Load memories and calculate unsummarized messages count
+        const charMemories = await RagService.getCharacterMemories(selected.id);
+        setMemories(charMemories);
+        const unsum = await RagService.getUnsummarizedCount(selected.id, currentMsgs);
+        setUnsummarizedCount(unsum);
+
         // Safe Save Slot Initialization / Migration (keeps existing progress intact)
         const saveState = await SaveService.initOrMigrateCharacterSaves(
           selected.id,
-          currentMsgs
+          currentMsgs,
+          charMemories
         );
         setSaveSlots(saveState.slots);
         setActiveSaveSlotId(saveState.activeSlotId);
@@ -129,10 +147,17 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
         setMessages(loadedMessages);
       }
 
+      // Load memories and calculate unsummarized messages count for new character
+      const charMemories = await RagService.getCharacterMemories(found.id);
+      setMemories(charMemories);
+      const unsum = await RagService.getUnsummarizedCount(found.id, effectiveMsgs);
+      setUnsummarizedCount(unsum);
+
       // Safe Save Slot Initialization / Migration for newly selected character
       const saveState = await SaveService.initOrMigrateCharacterSaves(
         found.id,
-        effectiveMsgs
+        effectiveMsgs,
+        charMemories
       );
       setSaveSlots(saveState.slots);
       setActiveSaveSlotId(saveState.activeSlotId);
@@ -197,14 +222,36 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
           (err) => console.warn('RAG extraction error (character):', err)
         );
 
-        // In background, keep active save slot in sync and update slot list preview
-        StorageService.getMemories(activeCharacter.id)
-          .then(async (mems) => {
-            await SaveService.syncActiveSlot(activeCharacter.id, finalMessages, mems);
-            const updated = await StorageService.getSaveSlotsMeta(activeCharacter.id);
-            setSaveSlots(updated);
-          })
-          .catch((err) => console.warn('Save sync error:', err));
+        // In background: calculate unsummarized count, trigger auto-summarization if batch size reached, and sync save slot
+        (async () => {
+          try {
+            const currentUnsum = await RagService.getUnsummarizedCount(activeCharacter.id, finalMessages);
+            setUnsummarizedCount(currentUnsum);
+
+            if (currentUnsum >= 14) {
+              const summaryResult = await RagService.summarizeRecentConversation(
+                activeCharacter.id,
+                activeCharacter.name,
+                finalMessages,
+                false
+              );
+              if (summaryResult.addedCount > 0) {
+                const fresh = await RagService.getCharacterMemories(activeCharacter.id);
+                setMemories(fresh);
+                const updatedUnsum = await RagService.getUnsummarizedCount(activeCharacter.id, finalMessages);
+                setUnsummarizedCount(updatedUnsum);
+              }
+            }
+
+            const currentMems = await StorageService.getMemories(activeCharacter.id);
+            setMemories(currentMems);
+            await SaveService.syncActiveSlot(activeCharacter.id, finalMessages, currentMems);
+            const updatedSlots = await StorageService.getSaveSlotsMeta(activeCharacter.id);
+            setSaveSlots(updatedSlots);
+          } catch (bgErr) {
+            console.warn('Background memory & save sync error:', bgErr);
+          }
+        })();
       } catch (err) {
         console.error('Failed to generate response:', err);
       } finally {
@@ -285,6 +332,9 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     async (slotId: string): Promise<void> => {
       const loaded = await SaveService.loadSaveSlot(activeCharacter.id, slotId);
       setMessages(loaded.messages);
+      setMemories(loaded.memories);
+      const unsum = await RagService.getUnsummarizedCount(activeCharacter.id, loaded.messages);
+      setUnsummarizedCount(unsum);
       setActiveSaveSlotId(slotId);
       const updated = await StorageService.getSaveSlotsMeta(activeCharacter.id);
       setSaveSlots(updated);
@@ -319,6 +369,8 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       );
 
       setMessages(res.messages);
+      setMemories(cleanLore);
+      setUnsummarizedCount(0);
       setActiveSaveSlotId(res.newSlotMeta.id);
       const updated = await StorageService.getSaveSlotsMeta(activeCharacter.id);
       setSaveSlots(updated);
@@ -360,9 +412,74 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       const imported = await SaveService.importSaveSlotFromJSON(activeCharacter.id, jsonString);
       const updated = await StorageService.getSaveSlotsMeta(activeCharacter.id);
       setSaveSlots(updated);
+      const freshMems = await StorageService.getMemories(activeCharacter.id);
+      setMemories(freshMems);
       return imported;
     },
     [activeCharacter.id]
+  );
+
+  const refreshMemories = useCallback(async () => {
+    const mems = await RagService.getCharacterMemories(activeCharacter.id);
+    setMemories(mems);
+    const unsum = await RagService.getUnsummarizedCount(activeCharacter.id, messages);
+    setUnsummarizedCount(unsum);
+  }, [activeCharacter.id, messages]);
+
+  const addMemory = useCallback(
+    async (content: string, category: MemoryCategory = 'user_fact', importance: number = 4) => {
+      const created = await RagService.addManualMemory(activeCharacter.id, content, category, importance);
+      const fresh = await RagService.getCharacterMemories(activeCharacter.id);
+      setMemories(fresh);
+      await SaveService.syncActiveSlot(activeCharacter.id, messages, fresh);
+      return created;
+    },
+    [activeCharacter.id, messages]
+  );
+
+  const updateMemory = useCallback(
+    async (
+      memoryId: string,
+      updates: Partial<Pick<MemoryEntry, 'content' | 'category' | 'importance'>>
+    ) => {
+      await RagService.updateMemory(activeCharacter.id, memoryId, updates);
+      const fresh = await RagService.getCharacterMemories(activeCharacter.id);
+      setMemories(fresh);
+      await SaveService.syncActiveSlot(activeCharacter.id, messages, fresh);
+    },
+    [activeCharacter.id, messages]
+  );
+
+  const deleteMemory = useCallback(
+    async (memoryId: string) => {
+      await RagService.deleteMemory(activeCharacter.id, memoryId);
+      const fresh = await RagService.getCharacterMemories(activeCharacter.id);
+      setMemories(fresh);
+      await SaveService.syncActiveSlot(activeCharacter.id, messages, fresh);
+    },
+    [activeCharacter.id, messages]
+  );
+
+  const summarizeRecentMessages = useCallback(
+    async (force: boolean = true) => {
+      const res = await RagService.summarizeRecentConversation(
+        activeCharacter.id,
+        activeCharacter.name,
+        messages,
+        force
+      );
+      if (res.addedCount > 0) {
+        const fresh = await RagService.getCharacterMemories(activeCharacter.id);
+        setMemories(fresh);
+        await SaveService.syncActiveSlot(activeCharacter.id, messages, fresh);
+        const updatedSlots = await StorageService.getSaveSlotsMeta(activeCharacter.id);
+        setSaveSlots(updatedSlots);
+      }
+      const unsum = await RagService.getUnsummarizedCount(activeCharacter.id, messages);
+      setUnsummarizedCount(unsum);
+      return res;
+    },
+    [activeCharacter.id, activeCharacter.name, messages]
   );
 
   const clearMessages = useCallback(async () => {
@@ -416,6 +533,13 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
         exportSaveSlot,
         importSaveSlot,
         refreshSaveSlots,
+        memories,
+        unsummarizedCount,
+        refreshMemories,
+        addMemory,
+        updateMemory,
+        deleteMemory,
+        summarizeRecentMessages,
       }}>
       {children}
     </ChatContext.Provider>

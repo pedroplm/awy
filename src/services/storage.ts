@@ -12,6 +12,7 @@ const STORAGE_KEYS = {
   SAVES_META_PREFIX: '@awy_saves_meta_',
   SAVE_DATA_PREFIX: '@awy_save_data_',
   ACTIVE_SAVE_PREFIX: '@awy_active_save_',
+  LAST_SUMMARIZED_ID_PREFIX: '@awy_last_summarized_id_',
 };
 
 export const StorageService = {
@@ -195,6 +196,23 @@ export const StorageService = {
       await AsyncStorage.setItem(`${STORAGE_KEYS.ACTIVE_SAVE_PREFIX}${characterId}`, slotId);
     } catch (err) {
       console.warn('Failed to save active save slot id:', err);
+    }
+  },
+
+  async getLastSummarizedId(characterId: string): Promise<string | null> {
+    try {
+      return await AsyncStorage.getItem(`${STORAGE_KEYS.LAST_SUMMARIZED_ID_PREFIX}${characterId}`);
+    } catch (err) {
+      console.warn('Failed to get last summarized id:', err);
+      return null;
+    }
+  },
+
+  async saveLastSummarizedId(characterId: string, msgId: string): Promise<void> {
+    try {
+      await AsyncStorage.setItem(`${STORAGE_KEYS.LAST_SUMMARIZED_ID_PREFIX}${characterId}`, msgId);
+    } catch (err) {
+      console.warn('Failed to save last summarized id:', err);
     }
   },
 };

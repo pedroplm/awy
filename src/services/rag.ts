@@ -1,14 +1,16 @@
 import { StorageService } from '@/services/storage';
 import { MemoryEntry, MemoryCategory, RetrievalResult } from '@/types/rag';
+import { ChatMessage } from '@/types/chat';
+import { UsageService } from '@/services/usage';
 
 // Pre-seeded base lore for default characters
 const DEFAULT_CHARACTER_LORE: Record<string, { content: string; category: MemoryCategory; importance: number; keywords: string[] }[]> = {
   nova: [
     {
-      content: 'Nova é estudante universitária e divide um apartamento de 2 quartos com você.',
+      content: 'Nova tem 25 anos, é estudante universitária e divide um apartamento de 2 quartos com você.',
       category: 'character_lore',
       importance: 5,
-      keywords: ['apartamento', 'apê', 'roommate', 'faculdade', 'universidade', 'quarto', 'morar'],
+      keywords: ['apartamento', 'apê', 'roommate', 'faculdade', 'universidade', 'quarto', 'morar', 'idade', '25'],
     },
     {
       content: 'A comida favorita da Nova para recarregar as energias após as aulas é pizza de quatro queijos bem quentinha.',
@@ -43,10 +45,10 @@ const DEFAULT_CHARACTER_LORE: Record<string, { content: string; category: Memory
   ],
   marina: [
     {
-      content: 'Marina "Lena" Vasconcelos tem 28 anos e restaura livros raros e documentos do século XVIII.',
+      content: 'Marina "Lena" Vasconcelos tem 25 anos e restaura livros raros e documentos do século XVIII.',
       category: 'character_lore',
       importance: 5,
-      keywords: ['marina', 'lena', 'livros', 'restauração', 'arte', 'oficina', 'documentos'],
+      keywords: ['marina', 'lena', 'livros', 'restauração', 'arte', 'oficina', 'documentos', 'idade', '25'],
     },
     {
       content: 'Marina aprecia o silêncio, toma chá preto sem açúcar e é muito protetora com suas ferramentas de bancada.',
@@ -355,6 +357,9 @@ export const RagService = {
       if (/(apê|apartamento|quarto|regras|limpeza|contas|aluguel)/i.test(query) && /(apê|apartamento|aluguel|tarefas|contas)/i.test(mem.content)) {
         score += 4.0;
       }
+      if (/(lembra|lembras|quando|aquele dia|aquela noite|colina|estrelas|fizemos|aconteceu|lembranca|lembrança|passado)/i.test(query) && (mem.category === 'event' || mem.category === 'relationship')) {
+        score += 5.0;
+      }
 
       // Importance multiplier (scale: 1.0 to 1.5)
       score *= 1.0 + (mem.importance * 0.1);
@@ -384,6 +389,7 @@ export const RagService = {
 
     const lines = memories.map((m) => {
       let tag = 'Fato';
+      if (m.category === 'event') tag = 'Momento Vivido';
       if (m.category === 'preference') tag = 'Preferência';
       if (m.category === 'relationship') tag = 'Acordo/Relação';
       if (m.category === 'character_lore') tag = 'Lore';
@@ -394,6 +400,258 @@ export const RagService = {
     return `[MEMÓRIA DE LONGO PRAZO & FATOS CONHECIDOS (RAG)]:
 ${lines.join('\n')}
 (INSTRUÇÃO DE ROLEPLAY: Você se lembra perfeitamente dessas informações acima de conversas ou acontecimentos passados. Aja com naturalidade humana, sem dizer roboticamente "meu banco de dados diz", use essas memórias com carinho e precisão como alguém que realmente presta atenção no usuário.)`;
+  },
+
+  /**
+   * Manually creates a new memory entry for a character.
+   */
+  async addManualMemory(
+    characterId: string,
+    content: string,
+    category: MemoryCategory = 'user_fact',
+    importance: number = 4
+  ): Promise<MemoryEntry> {
+    const existing = await this.getCharacterMemories(characterId);
+    const tokens = normalizeTokens(content);
+    const newEntry: MemoryEntry = {
+      id: `man_${characterId}_${Date.now()}`,
+      characterId,
+      content: content.trim(),
+      category,
+      importance,
+      timestamp: Date.now(),
+      source: 'manual',
+      keywords: tokens,
+    };
+
+    const updated = [newEntry, ...existing];
+    await StorageService.saveMemories(characterId, updated);
+    return newEntry;
+  },
+
+  /**
+   * Updates an existing memory entry.
+   */
+  async updateMemory(
+    characterId: string,
+    memoryId: string,
+    updates: Partial<Pick<MemoryEntry, 'content' | 'category' | 'importance'>>
+  ): Promise<void> {
+    const existing = await this.getCharacterMemories(characterId);
+    const updated = existing.map((mem) => {
+      if (mem.id !== memoryId) return mem;
+      const newContent = updates.content !== undefined ? updates.content.trim() : mem.content;
+      return {
+        ...mem,
+        ...updates,
+        content: newContent,
+        keywords: updates.content !== undefined ? normalizeTokens(newContent) : mem.keywords,
+      };
+    });
+    await StorageService.saveMemories(characterId, updated);
+  },
+
+  /**
+   * Deletes a specific memory entry.
+   */
+  async deleteMemory(characterId: string, memoryId: string): Promise<void> {
+    const existing = await this.getCharacterMemories(characterId);
+    const filtered = existing.filter((mem) => mem.id !== memoryId);
+    await StorageService.saveMemories(characterId, filtered);
+  },
+
+  /**
+   * Calculates how many messages exist since the last batch summarization.
+   */
+  async getUnsummarizedCount(characterId: string, messages: ChatMessage[]): Promise<number> {
+    if (!messages || messages.length === 0) return 0;
+    const lastId = await StorageService.getLastSummarizedId(characterId);
+    if (!lastId) return messages.length;
+    const idx = messages.findIndex((m) => m.id === lastId);
+    if (idx === -1) return messages.length;
+    return Math.max(0, messages.length - (idx + 1));
+  },
+
+  /**
+   * Summarizes a batch of unsummarized recent messages in an ultra-economical telegraphic style.
+   * Extracts max 3 dense facts or events (e.g. "[Cena] Viram estrelas na colina").
+   * Automatically assigns categories and keywords, avoids duplicates, and stores in RAG memory.
+   */
+  async summarizeRecentConversation(
+    characterId: string,
+    characterName: string,
+    messages: ChatMessage[],
+    force: boolean = false
+  ): Promise<{ addedCount: number; message: string }> {
+    if (!messages || messages.length < 4) {
+      return { addedCount: 0, message: 'Poucas mensagens para gerar resumo.' };
+    }
+
+    const lastId = await StorageService.getLastSummarizedId(characterId);
+    let startIndex = 0;
+    if (lastId) {
+      const idx = messages.findIndex((m) => m.id === lastId);
+      if (idx !== -1) {
+        startIndex = idx + 1;
+      }
+    }
+
+    const unsummarized = messages.slice(startIndex);
+    if (!force && unsummarized.length < 14) {
+      return {
+        addedCount: 0,
+        message: `Acumulando mensagens (${unsummarized.length}/14 para resumo automático).`,
+      };
+    }
+
+    // Take at most 20 recent messages to keep input tiny
+    const batch = unsummarized.slice(-20);
+    if (batch.length < 3) {
+      return { addedCount: 0, message: 'Poucas mensagens novas para resumir.' };
+    }
+
+    // Format compact dialogue (max ~110 chars per message to minimize input tokens)
+    const dialogueLines = batch.map((m) => {
+      const speaker = m.sender === 'user' ? 'Usuário' : characterName;
+      const cleanText = m.text.replace(/\s+/g, ' ').trim().slice(0, 110);
+      return `${speaker}: ${cleanText}`;
+    });
+    const dialogueSnippet = dialogueLines.join('\n');
+
+    const apiKey = process.env.EXPO_PUBLIC_GEMINI_API_KEY;
+    if (!apiKey) {
+      // Local fallback without API key - advance the pointer so we don't stall
+      await StorageService.saveLastSummarizedId(characterId, batch[batch.length - 1].id);
+      return { addedCount: 0, message: 'Sem chave de API configurada.' };
+    }
+
+    const systemInstruction = `Você é um extrator de memórias de longo prazo para um RPG. Extraia de 1 a 3 acontecimentos marcantes ou fatos cruciais revelados nesta conversa.
+Regras OBRIGATÓRIAS:
+1. Seja ultra-curto e telegráfico (máximo 12 palavras por linha).
+2. Use EXCLUSIVAMENTE um destes prefixos no início de cada linha:
+[Cena] para eventos compartilhados marcantes (ex: Olharam estrelas na colina à noite)
+[Fato] para coisas aprendidas sobre o usuário ou sua vida (ex: Usuário toca violão clássico)
+[Promessa] para acordos ou promessas mútuas (ex: Combinaram de tomar café na sexta)
+[Segredo] para confissões emocionais importantes
+3. Se for apenas conversa rotineira sem nenhum evento ou revelação marcante, responda apenas: NENHUM`;
+
+    const model = process.env.EXPO_PUBLIC_GEMINI_MODEL || 'gemini-flash-lite-latest';
+    const payload = {
+      system_instruction: {
+        parts: [{ text: systemInstruction }],
+      },
+      contents: [
+        {
+          role: 'user',
+          parts: [{ text: `Conversa recente a ser resumida:\n${dialogueSnippet}` }],
+        },
+      ],
+      generationConfig: {
+        temperature: 0.2,
+        maxOutputTokens: 120, // super strict and low token usage!
+      },
+    };
+
+    let reply = '';
+    try {
+      const res = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        }
+      );
+
+      if (!res.ok) {
+        throw new Error(`API error ${res.status}`);
+      }
+
+      const data = await res.json();
+      if (data.usageMetadata) {
+        UsageService.recordUsage(
+          data.usageMetadata.promptTokenCount || 0,
+          data.usageMetadata.candidatesTokenCount || 0,
+          model
+        ).catch(() => {});
+      }
+
+      reply =
+        data.candidates?.[0]?.content?.parts
+          ?.filter((p: { text?: string; thought?: boolean }) => p.text && !p.thought)
+          ?.map((p: { text?: string }) => p.text)
+          ?.join('') ||
+        data.candidates?.[0]?.content?.parts?.[0]?.text ||
+        '';
+    } catch (apiErr) {
+      console.warn('Erro ao chamar resumo no Gemini:', apiErr);
+      return { addedCount: 0, message: 'Falha na conexão ao gerar resumo.' };
+    }
+
+    // Save the pointer so we never re-summarize this batch
+    const lastBatchMsg = batch[batch.length - 1];
+    await StorageService.saveLastSummarizedId(characterId, lastBatchMsg.id);
+
+    if (!reply || reply.includes('NENHUM')) {
+      return { addedCount: 0, message: 'Conversa rotineira (nenhum evento marcante novo).' };
+    }
+
+    // Parse bullet points
+    const lines = reply
+      .split('\n')
+      .map((l) => l.trim())
+      .filter((l) => l.length > 5 && !l.toUpperCase().includes('NENHUM'));
+
+    const existingMemories = await this.getCharacterMemories(characterId);
+    const addedEntries: MemoryEntry[] = [];
+
+    for (const line of lines) {
+      const match = line.match(/^\[(Cena|Fato|Promessa|Segredo)\]\s*(.+)/i);
+      let category: MemoryCategory = 'event';
+      let content = line;
+
+      if (match) {
+        const tag = match[1].toLowerCase();
+        content = match[2].trim();
+        if (tag === 'cena') category = 'event';
+        else if (tag === 'fato') category = 'user_fact';
+        else if (tag === 'promessa') category = 'relationship';
+        else if (tag === 'segredo') category = 'relationship';
+      }
+
+      // Check duplicates: if existing memory content has high lexical similarity
+      const tokens = normalizeTokens(content);
+      const isDuplicate = existingMemories.some((em) => {
+        const emTokens = normalizeTokens(em.content);
+        const overlap = tokens.filter((t) => emTokens.includes(t)).length;
+        return tokens.length > 0 && overlap / tokens.length >= 0.7;
+      });
+
+      if (!isDuplicate && content.length >= 5) {
+        const entry: MemoryEntry = {
+          id: `sum_${characterId}_${Date.now()}_${addedEntries.length}`,
+          characterId,
+          content,
+          category,
+          importance: category === 'event' ? 4 : 5,
+          timestamp: Date.now(),
+          source: 'summary',
+          keywords: tokens,
+        };
+        addedEntries.push(entry);
+      }
+    }
+
+    if (addedEntries.length > 0) {
+      const merged = [...existingMemories, ...addedEntries];
+      await StorageService.saveMemories(characterId, merged);
+      return {
+        addedCount: addedEntries.length,
+        message: `${addedEntries.length} nova(s) lembrança(s) gravada(s) com sucesso!`,
+      };
+    }
+
+    return { addedCount: 0, message: 'Nenhuma lembrança inédita detectada.' };
   },
 
   /**

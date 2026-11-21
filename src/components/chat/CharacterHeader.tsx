@@ -9,6 +9,7 @@ import { useTheme } from '@/hooks/use-theme';
 import { useChat } from '@/context/ChatContext';
 import { UsageModal } from './UsageModal';
 import { SaveSlotsModal } from './SaveSlotsModal';
+import { MemoryDiaryModal } from './MemoryDiaryModal';
 import {
   getMarinaStageImage,
   getMarinaStageInfo,
@@ -33,9 +34,10 @@ export function CharacterHeader({
 }: Props) {
   const router = useRouter();
   const theme = useTheme();
-  const { currentBarrier, isTextOnlyMode } = useChat();
+  const { currentBarrier, isTextOnlyMode, unsummarizedCount } = useChat();
   const [usageModalVisible, setUsageModalVisible] = useState(false);
   const [saveModalVisible, setSaveModalVisible] = useState(false);
+  const [diaryModalVisible, setDiaryModalVisible] = useState(false);
   const [imageModalVisible, setImageModalVisible] = useState(false);
 
   const handleBack = () => {
@@ -244,24 +246,20 @@ export function CharacterHeader({
           )}
 
           <TouchableOpacity
-            onPress={() => setSaveModalVisible(true)}
+            onPress={() => setDiaryModalVisible(true)}
             style={[styles.iconButton, { backgroundColor: theme.backgroundElement }]}
-            accessibilityLabel="Gerenciar saves e linhas do tempo">
-            <Ionicons name="bookmark" size={17} color={character.accentColor} />
+            accessibilityLabel="Abrir diário de lembranças e fatos conhecidos">
+            <Ionicons name="book-outline" size={17} color={character.accentColor} />
+            {unsummarizedCount > 0 && (
+              <View style={[styles.headerUnsumDot, { backgroundColor: character.accentColor || '#8B5CF6' }]} />
+            )}
           </TouchableOpacity>
 
           <TouchableOpacity
             onPress={() => setUsageModalVisible(true)}
             style={[styles.iconButton, { backgroundColor: theme.backgroundElement }]}
-            accessibilityLabel="Ver consumo de tokens e limites da API">
+            accessibilityLabel="Configurações e opções da conversa">
             <Ionicons name="settings-outline" size={18} color={theme.textSecondary} />
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            onPress={handleClearPress}
-            style={[styles.iconButton, { backgroundColor: theme.backgroundElement }]}
-            accessibilityLabel="Começar nova conversa">
-            <Ionicons name="add-circle-outline" size={19} color={theme.textSecondary} />
           </TouchableOpacity>
         </View>
       </View>
@@ -347,12 +345,20 @@ export function CharacterHeader({
       <UsageModal
         visible={usageModalVisible}
         onClose={() => setUsageModalVisible(false)}
+        onOpenSaves={() => setSaveModalVisible(true)}
+        onStartNewChat={handleClearPress}
       />
 
       {/* Save Slots & Timelines Modal */}
       <SaveSlotsModal
         visible={saveModalVisible}
         onClose={() => setSaveModalVisible(false)}
+      />
+
+      {/* Memory & Lore Diary Modal */}
+      <MemoryDiaryModal
+        visible={diaryModalVisible}
+        onClose={() => setDiaryModalVisible(false)}
       />
 
       {/* Full-size posture viewer modal */}
@@ -519,6 +525,15 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     justifyContent: 'center',
     alignItems: 'center',
+    position: 'relative',
+  },
+  headerUnsumDot: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    width: 7,
+    height: 7,
+    borderRadius: 4,
   },
   meterCard: {
     paddingHorizontal: Spacing.three,

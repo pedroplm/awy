@@ -19,9 +19,16 @@ import { useChat } from '@/context/ChatContext';
 interface Props {
   visible: boolean;
   onClose: () => void;
+  onOpenSaves?: () => void;
+  onStartNewChat?: () => void;
 }
 
-export function UsageModal({ visible, onClose }: Props) {
+export function UsageModal({
+  visible,
+  onClose,
+  onOpenSaves,
+  onStartNewChat,
+}: Props) {
   const theme = useTheme();
   const { stats, resetStats, limits } = useUsage();
   const { isTextOnlyMode, setTextOnlyMode, activeCharacter } = useChat();
@@ -93,6 +100,58 @@ export function UsageModal({ visible, onClose }: Props) {
           </View>
 
           <ScrollView style={styles.content} showsVerticalScrollIndicator={true} indicatorStyle="white">
+            {/* Conversation & Save Management Section */}
+            <View style={[styles.sectionCard, { backgroundColor: theme.backgroundElement }]}>
+              <View style={styles.sectionHeaderRow}>
+                <Ionicons name="chatbubbles-outline" size={16} color={activeCharacter.accentColor || '#6366F1'} />
+                <Text style={[styles.sectionTitle, { color: theme.text }]}>
+                  Opções da Conversa
+                </Text>
+              </View>
+
+              <TouchableOpacity
+                activeOpacity={0.7}
+                onPress={() => {
+                  onClose();
+                  onOpenSaves?.();
+                }}
+                style={[styles.actionRowBtn, { backgroundColor: theme.backgroundSelected }]}>
+                <View style={[styles.actionRowIconWrap, { backgroundColor: (activeCharacter.accentColor || '#6366F1') + '20' }]}>
+                  <Ionicons name="bookmark" size={18} color={activeCharacter.accentColor || '#6366F1'} />
+                </View>
+                <View style={styles.actionRowTextCol}>
+                  <Text style={[styles.actionRowTitle, { color: theme.text }]}>
+                    Saves & Linhas do Tempo
+                  </Text>
+                  <Text style={[styles.actionRowSubtitle, { color: theme.textSecondary }]}>
+                    Gerenciar slots, alternar histórias e fazer backup em arquivo
+                  </Text>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color={theme.textSecondary} />
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                activeOpacity={0.7}
+                onPress={() => {
+                  onClose();
+                  onStartNewChat?.();
+                }}
+                style={[styles.actionRowBtn, { backgroundColor: theme.backgroundSelected, marginTop: 8 }]}>
+                <View style={[styles.actionRowIconWrap, { backgroundColor: '#10B98120' }]}>
+                  <Ionicons name="add-circle-outline" size={19} color="#10B981" />
+                </View>
+                <View style={styles.actionRowTextCol}>
+                  <Text style={[styles.actionRowTitle, { color: theme.text }]}>
+                    Começar Nova Conversa
+                  </Text>
+                  <Text style={[styles.actionRowSubtitle, { color: theme.textSecondary }]}>
+                    Inicia uma nova linha do tempo com {activeCharacter.name}
+                  </Text>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color={theme.textSecondary} />
+              </TouchableOpacity>
+            </View>
+
             {/* Reading Mode / Text Only Preferences */}
             <View style={[styles.sectionCard, { backgroundColor: theme.backgroundElement }]}>
               <View style={styles.sectionHeaderRow}>
@@ -355,6 +414,32 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 13,
     fontWeight: '700',
+  },
+  actionRowBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: Spacing.two + 2,
+    borderRadius: 12,
+    gap: Spacing.two,
+  },
+  actionRowIconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  actionRowTextCol: {
+    flex: 1,
+    gap: 2,
+  },
+  actionRowTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  actionRowSubtitle: {
+    fontSize: 11,
+    lineHeight: 15,
   },
   preferenceRow: {
     flexDirection: 'row',
