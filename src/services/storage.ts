@@ -13,6 +13,7 @@ const STORAGE_KEYS = {
   SAVE_DATA_PREFIX: '@awy_save_data_',
   ACTIVE_SAVE_PREFIX: '@awy_active_save_',
   LAST_SUMMARIZED_ID_PREFIX: '@awy_last_summarized_id_',
+  GALLERY_UNLOCKED_PREFIX: '@awy_gallery_unlocked_',
 };
 
 export const StorageService = {

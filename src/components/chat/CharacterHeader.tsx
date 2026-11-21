@@ -10,6 +10,7 @@ import { useChat } from '@/context/ChatContext';
 import { UsageModal } from './UsageModal';
 import { SaveSlotsModal } from './SaveSlotsModal';
 import { MemoryDiaryModal } from './MemoryDiaryModal';
+import { GalleryModal } from '../gallery/GalleryModal';
 import {
   getMarinaStageImage,
   getMarinaStageInfo,
@@ -39,6 +40,7 @@ export function CharacterHeader({
   const [saveModalVisible, setSaveModalVisible] = useState(false);
   const [diaryModalVisible, setDiaryModalVisible] = useState(false);
   const [imageModalVisible, setImageModalVisible] = useState(false);
+  const [galleryModalVisible, setGalleryModalVisible] = useState(false);
 
   const handleBack = () => {
     if (onBack) {
@@ -245,6 +247,15 @@ export function CharacterHeader({
             </TouchableOpacity>
           )}
 
+          {hasImage && (
+            <TouchableOpacity
+              onPress={() => setGalleryModalVisible(true)}
+              style={[styles.iconButton, { backgroundColor: theme.backgroundElement }]}
+              accessibilityLabel="Abrir álbum de memórias e galeria de fotos">
+              <Ionicons name="images-outline" size={17} color={character.accentColor || theme.text} />
+            </TouchableOpacity>
+          )}
+
           <TouchableOpacity
             onPress={() => setDiaryModalVisible(true)}
             style={[styles.iconButton, { backgroundColor: theme.backgroundElement }]}
@@ -287,7 +298,7 @@ export function CharacterHeader({
 
             <TouchableOpacity
               activeOpacity={0.7}
-              onPress={hasImage ? () => setImageModalVisible(true) : undefined}
+              onPress={hasImage ? () => setGalleryModalVisible(true) : undefined}
               style={styles.meterRightCol}>
               <Text style={[styles.intimacyLabel, { color: theme.textSecondary }]}>
                 NÍVEL DE INTIMIDADE
@@ -299,7 +310,7 @@ export function CharacterHeader({
                 </Text>
                 {hasImage && (
                   <Ionicons
-                    name="camera-outline"
+                    name="images-outline"
                     size={14}
                     color={character.accentColor}
                     style={{ marginLeft: 2 }}
@@ -346,6 +357,7 @@ export function CharacterHeader({
         visible={usageModalVisible}
         onClose={() => setUsageModalVisible(false)}
         onOpenSaves={() => setSaveModalVisible(true)}
+        onOpenGallery={() => setGalleryModalVisible(true)}
         onStartNewChat={handleClearPress}
       />
 
@@ -359,6 +371,13 @@ export function CharacterHeader({
       <MemoryDiaryModal
         visible={diaryModalVisible}
         onClose={() => setDiaryModalVisible(false)}
+      />
+
+      {/* Memory Album & Photo Gallery Modal */}
+      <GalleryModal
+        visible={galleryModalVisible}
+        onClose={() => setGalleryModalVisible(false)}
+        character={character}
       />
 
       {/* Full-size posture viewer modal */}

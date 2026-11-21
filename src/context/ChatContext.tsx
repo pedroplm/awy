@@ -5,6 +5,7 @@ import { StorageService } from '@/services/storage';
 import { AIService } from '@/services/ai';
 import { RagService } from '@/services/rag';
 import { SaveService } from '@/services/save';
+import { GalleryService } from '@/services/gallery';
 import { SaveSlotMeta } from '@/types/save';
 import { MemoryEntry, MemoryCategory } from '@/types/rag';
 
@@ -43,6 +44,10 @@ interface ChatContextType {
   updateMemory: (memoryId: string, updates: Partial<Pick<MemoryEntry, 'content' | 'category' | 'importance'>>) => Promise<void>;
   deleteMemory: (memoryId: string) => Promise<void>;
   summarizeRecentMessages: (force?: boolean) => Promise<{ addedCount: number; message: string }>;
+  // Gallery & Unlocked Memories
+  unlockedPhotoIds: string[];
+  refreshGallery: () => Promise<void>;
+  unlockGalleryPhoto: (photoId: string) => Promise<void>;
 }
 
 const ChatContext = createContext<ChatContextType | undefined>(undefined);
@@ -60,6 +65,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
   const [activeSaveSlotId, setActiveSaveSlotId] = useState<string | null>(null);
   const [memories, setMemories] = useState<MemoryEntry[]>([]);
   const [unsummarizedCount, setUnsummarizedCount] = useState<number>(0);
+  const [unlockedPhotoIds, setUnlockedPhotoIds] = useState<string[]>([]);
 
   // Initialize characters, active character, and preferences
   useEffect(() => {
@@ -111,6 +117,14 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
         );
         setSaveSlots(saveState.slots);
         setActiveSaveSlotId(saveState.activeSlotId);
+
+        // Sync and load unlocked gallery photos
+        const unlocks = await GalleryService.syncUnlockedFromMessages(
+          selected.id,
+          currentMsgs,
+          null
+        );
+        setUnlockedPhotoIds(unlocks);
       } catch (err) {
         console.warn('Error initializing chat context:', err);
       } finally {
@@ -120,6 +134,19 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
 
     init();
   }, []);
+
+  const currentBarrier = React.useMemo(() => {
+    if (!activeCharacter.hasBarrierMeter && activeCharacter.initialBarrier === undefined) {
+      return null;
+    }
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const match = messages[i].text.match(/\[(?:Status Atual:\s*)?Barreiras?(?:\s*em\s*)?[:\s]+(\d+)%[^\]]*\]/i);
+      if (match) {
+        return Math.min(100, Math.max(0, parseInt(match[1], 10)));
+      }
+    }
+    return activeCharacter.initialBarrier ?? 98;
+  }, [activeCharacter, messages]);
 
   const selectCharacter = useCallback(
     async (characterId: string) => {
@@ -161,6 +188,14 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       );
       setSaveSlots(saveState.slots);
       setActiveSaveSlotId(saveState.activeSlotId);
+
+      // Sync and load unlocked gallery photos for selected character
+      const unlocks = await GalleryService.syncUnlockedFromMessages(
+        found.id,
+        effectiveMsgs,
+        null
+      );
+      setUnlockedPhotoIds(unlocks);
     },
     [characters, activeCharacter]
   );
@@ -248,6 +283,14 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
             await SaveService.syncActiveSlot(activeCharacter.id, finalMessages, currentMems);
             const updatedSlots = await StorageService.getSaveSlotsMeta(activeCharacter.id);
             setSaveSlots(updatedSlots);
+
+            // Sync gallery unlocks with new messages
+            const updatedUnlocks = await GalleryService.syncUnlockedFromMessages(
+              activeCharacter.id,
+              finalMessages,
+              null
+            );
+            setUnlockedPhotoIds(updatedUnlocks);
           } catch (bgErr) {
             console.warn('Background memory & save sync error:', bgErr);
           }
@@ -338,6 +381,12 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       setActiveSaveSlotId(slotId);
       const updated = await StorageService.getSaveSlotsMeta(activeCharacter.id);
       setSaveSlots(updated);
+      const unlocks = await GalleryService.syncUnlockedFromMessages(
+        activeCharacter.id,
+        loaded.messages,
+        null
+      );
+      setUnlockedPhotoIds(unlocks);
     },
     [activeCharacter.id]
   );
@@ -374,8 +423,31 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       setActiveSaveSlotId(res.newSlotMeta.id);
       const updated = await StorageService.getSaveSlotsMeta(activeCharacter.id);
       setSaveSlots(updated);
+      const unlocks = await GalleryService.syncUnlockedFromMessages(
+        activeCharacter.id,
+        res.messages,
+        null
+      );
+      setUnlockedPhotoIds(unlocks);
     },
     [activeCharacter]
+  );
+
+  const refreshGallery = useCallback(async () => {
+    const unlocks = await GalleryService.syncUnlockedFromMessages(
+      activeCharacter.id,
+      messages,
+      currentBarrier
+    );
+    setUnlockedPhotoIds(unlocks);
+  }, [activeCharacter.id, messages, currentBarrier]);
+
+  const unlockGalleryPhoto = useCallback(
+    async (photoId: string) => {
+      const updated = await GalleryService.unlockPhoto(activeCharacter.id, photoId);
+      setUnlockedPhotoIds(updated);
+    },
+    [activeCharacter.id]
   );
 
   const deleteSaveSlot = useCallback(
@@ -487,19 +559,6 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     await startNewConversation(`Reset (${new Date().toLocaleDateString('pt-BR')})`);
   }, [startNewConversation]);
 
-  const currentBarrier = React.useMemo(() => {
-    if (!activeCharacter.hasBarrierMeter && activeCharacter.initialBarrier === undefined) {
-      return null;
-    }
-    for (let i = messages.length - 1; i >= 0; i--) {
-      const match = messages[i].text.match(/\[(?:Status Atual:\s*)?Barreiras?(?:\s*em\s*)?[:\s]+(\d+)%[^\]]*\]/i);
-      if (match) {
-        return Math.min(100, Math.max(0, parseInt(match[1], 10)));
-      }
-    }
-    return activeCharacter.initialBarrier ?? 98;
-  }, [activeCharacter, messages]);
-
   const setTextOnlyMode = useCallback(async (enabled: boolean) => {
     setIsTextOnlyMode(enabled);
     await StorageService.saveTextOnlyMode(enabled);
@@ -540,6 +599,9 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
         updateMemory,
         deleteMemory,
         summarizeRecentMessages,
+        unlockedPhotoIds,
+        refreshGallery,
+        unlockGalleryPhoto,
       }}>
       {children}
     </ChatContext.Provider>

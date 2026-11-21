@@ -20,6 +20,7 @@ interface Props {
   visible: boolean;
   onClose: () => void;
   onOpenSaves?: () => void;
+  onOpenGallery?: () => void;
   onStartNewChat?: () => void;
 }
 
@@ -27,6 +28,7 @@ export function UsageModal({
   visible,
   onClose,
   onOpenSaves,
+  onOpenGallery,
   onStartNewChat,
 }: Props) {
   const theme = useTheme();
@@ -129,6 +131,29 @@ export function UsageModal({
                 </View>
                 <Ionicons name="chevron-forward" size={18} color={theme.textSecondary} />
               </TouchableOpacity>
+
+              {onOpenGallery && (
+                <TouchableOpacity
+                  activeOpacity={0.7}
+                  onPress={() => {
+                    onClose();
+                    onOpenGallery();
+                  }}
+                  style={[styles.actionRowBtn, { backgroundColor: theme.backgroundSelected, marginTop: 8 }]}>
+                  <View style={[styles.actionRowIconWrap, { backgroundColor: (activeCharacter.accentColor || '#F59E0B') + '20' }]}>
+                    <Ionicons name="images" size={18} color={activeCharacter.accentColor || '#F59E0B'} />
+                  </View>
+                  <View style={styles.actionRowTextCol}>
+                    <Text style={[styles.actionRowTitle, { color: theme.text }]}>
+                      Álbum de Memórias & Galeria
+                    </Text>
+                    <Text style={[styles.actionRowSubtitle, { color: theme.textSecondary }]}>
+                      Fotos desbloqueadas, cenas especiais e dicas de momentos
+                    </Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={18} color={theme.textSecondary} />
+                </TouchableOpacity>
+              )}
 
               <TouchableOpacity
                 activeOpacity={0.7}
