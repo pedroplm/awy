@@ -119,19 +119,58 @@ export function getMarinaStageInfo(barrier: number): MarinaStageInfo {
 }
 
 export const NOVA_STAGE_IMAGES: Record<string | number, any> = {
+    // Barrier milestones (100 down to 0)
     100: require("@/assets/images/Nova/Nova_100.jpg"),
+    90: require("@/assets/images/Nova/thinking.jpg"),
+    80: require("@/assets/images/Nova/car_passenger_nova.jpg"),
+    70: require("@/assets/images/Nova/close_on sofa_.jpg"),
+    60: require("@/assets/images/Nova/shy.jpg"),
+    50: require("@/assets/images/Nova/happy_home.jpg"),
+    40: require("@/assets/images/Nova/layed_on_grass.jpg"),
+    30: require("@/assets/images/Nova/hugging.jpg"),
+    20: require("@/assets/images/Nova/night_inbed_nova.jpg"),
+    10: require("@/assets/images/Nova/kiss.jpg"),
+    0: require("@/assets/images/Nova/close_in_bed.gif"),
+
+    // Contextual and situational variants
+    on_top: require("@/assets/images/Nova/on_top_of_you_nova.png"),
+    thinking: require("@/assets/images/Nova/thinking.jpg"),
+    layed_thinking: require("@/assets/images/Nova/layed_thinking_nova.jpg"),
+    window: require("@/assets/images/Nova/looking_at_you_from_the_window_nova.jpg"),
+    car: require("@/assets/images/Nova/car_passenger_nova.jpg"),
+    sofa: require("@/assets/images/Nova/close_on sofa_.jpg"),
+    shy: require("@/assets/images/Nova/shy.jpg"),
+    happy: require("@/assets/images/Nova/happy.jpg"),
     happy_home: require("@/assets/images/Nova/happy_home.jpg"),
     happy_university: require("@/assets/images/Nova/happy_university.jpg"),
+    grass: require("@/assets/images/Nova/layed_on_grass.jpg"),
+    hugging: require("@/assets/images/Nova/hugging.jpg"),
+    kiss: require("@/assets/images/Nova/kiss.jpg"),
+    morning_bed: require("@/assets/images/Nova/mornign_in_bet.jpg"),
+    morning_bed_close: require("@/assets/images/Nova/morgning_in_bed_close.jpg"),
+    night_bed: require("@/assets/images/Nova/night_inbed_nova.jpg"),
+    close_in_bed_gif: require("@/assets/images/Nova/close_in_bed.gif"),
 };
 
 export function getNovaStageTier(barrier: number): number {
-    return 100;
+    if (barrier >= 95) return 100;
+    if (barrier >= 85) return 90;
+    if (barrier >= 75) return 80;
+    if (barrier >= 65) return 70;
+    if (barrier >= 55) return 60;
+    if (barrier >= 45) return 50;
+    if (barrier >= 35) return 40;
+    if (barrier >= 25) return 30;
+    if (barrier >= 15) return 20;
+    if (barrier >= 5) return 10;
+    return 0;
 }
 
 export interface NovaImageContext {
     barrier?: number;
     location?: "casa" | "university";
     sentiment?: "happy" | "neutral" | "defensive";
+    text?: string;
 }
 
 export function getNovaContextualImage(context?: NovaImageContext): {
@@ -145,29 +184,110 @@ export function getNovaContextualImage(context?: NovaImageContext): {
     const barrier = context?.barrier ?? 95;
     const location = context?.location ?? "casa";
     const sentiment = context?.sentiment ?? "neutral";
+    const textLower = (context?.text || "").toLowerCase();
 
-    // Rule 1: High priority milestone barriers (e.g. 90%, 80%, etc., when available)
-    if (NOVA_STAGE_IMAGES[barrier] && barrier !== 100) {
-        return {
-            image: NOVA_STAGE_IMAGES[barrier],
-            tier: barrier,
-            title: `Marco ${barrier}% Desbloqueado`,
-            expression: "Nova evoluindo intimidade no apê",
-            isSentimentCard: false,
-            imageKey: String(barrier),
-        };
+    // 1. Situational text-triggered cards (High priority contextual immersion)
+    if (textLower) {
+        if (/(carro|carona|dirigir|estrada|transito|trânsito|passageir)/i.test(textLower)) {
+            return {
+                image: NOVA_STAGE_IMAGES.car,
+                tier: barrier,
+                title: "Carona para a University",
+                expression: "No banco do passageiro conversando com você a caminho do campus",
+                isSentimentCard: true,
+                imageKey: "car",
+            };
+        }
+        if (/(janela|chuva la fora|olhando pela janela|vidro molhado)/i.test(textLower)) {
+            return {
+                image: NOVA_STAGE_IMAGES.window,
+                tier: barrier,
+                title: "Olhando pela Janela",
+                expression: "Observando a chuva lá fora pensativa na sala",
+                isSentimentCard: true,
+                imageKey: "window",
+            };
+        }
+        if (/(sofa|sofá|assistir|filme|televisao|sala de estar)/i.test(textLower)) {
+            return {
+                image: NOVA_STAGE_IMAGES.sofa,
+                tier: barrier,
+                title: "Juntinho no Sofá",
+                expression: "Sentada bem pertinho no sofá dividindo o momento",
+                isSentimentCard: true,
+                imageKey: "sofa",
+            };
+        }
+        if (/(grama|parque|jardim|deitad.*na grama|ao ar livre|ar livre)/i.test(textLower)) {
+            return {
+                image: NOVA_STAGE_IMAGES.grass,
+                tier: barrier,
+                title: "Paz na Grama do Campus",
+                expression: "Deitada sob o sol da tarde, relaxada e sorridente",
+                isSentimentCard: true,
+                imageKey: "grass",
+            };
+        }
+        if (/(abraco|abraço|abracar|abraçar|apertad.*peito)/i.test(textLower) && barrier <= 60) {
+            return {
+                image: NOVA_STAGE_IMAGES.hugging,
+                tier: barrier,
+                title: "Abraço Acolhedor",
+                expression: "Envolvendo você com carinho sincero e alívio",
+                isSentimentCard: true,
+                imageKey: "hugging",
+            };
+        }
+        if (/(beijo|beijar|selar.*labios|lábios|boca)/i.test(textLower) && barrier <= 30) {
+            return {
+                image: NOVA_STAGE_IMAGES.kiss,
+                tier: barrier,
+                title: "O Primeiro Beijo",
+                expression: "Olhos fechados e respiração curta, entregando-se ao momento",
+                isSentimentCard: true,
+                imageKey: "kiss",
+            };
+        }
+        if (/(acordar|bom dia|manha|manhã|cedo.*cama)/i.test(textLower) && barrier <= 40) {
+            return {
+                image: NOVA_STAGE_IMAGES.morning_bed_close,
+                tier: barrier,
+                title: "Manhã Acolhedora",
+                expression: "Acordando bem pertinho com olhar preguiçoso e doce",
+                isSentimentCard: true,
+                imageKey: "morning_bed_close",
+            };
+        }
+        if (/(noite|dormir|cama|quarto|coberta|sonho)/i.test(textLower) && barrier <= 30) {
+            return {
+                image: barrier <= 10 ? NOVA_STAGE_IMAGES.close_in_bed_gif : NOVA_STAGE_IMAGES.night_bed,
+                tier: barrier,
+                title: "Aconchego na Cama",
+                expression: "Deitada sob as cobertas na penumbra do quarto",
+                isSentimentCard: true,
+                imageKey: "night_bed",
+            };
+        }
+        if (/(tímida|timida|corada|vergonha|sem graca|sem graça)/i.test(textLower)) {
+            return {
+                image: NOVA_STAGE_IMAGES.shy,
+                tier: barrier,
+                title: "Tímida & Desarmada",
+                expression: "Bochechas vermelhas e olhando de lado sem saber como reagir",
+                isSentimentCard: true,
+                imageKey: "shy",
+            };
+        }
     }
 
-    // Rule 2: Sentiment + Location (Nos meio-termos, ex: 98%, 94%, 92%, etc.)
-    // If Nova is happy with what the user said:
+    // 2. Sentiment + Location Trigger (When happy)
     if (sentiment === "happy") {
         if (location === "university") {
             return {
                 image: NOVA_STAGE_IMAGES.happy_university,
                 tier: barrier,
                 title: "Feliz na University",
-                expression:
-                    "Sorriso radiante e animada pelos corredores do campus da university",
+                expression: "Sorriso radiante e animada pelos corredores do campus",
                 isSentimentCard: true,
                 imageKey: "happy_university",
             };
@@ -176,23 +296,116 @@ export function getNovaContextualImage(context?: NovaImageContext): {
             image: NOVA_STAGE_IMAGES.happy_home,
             tier: barrier,
             title: "Feliz no Apartamento",
-            expression:
-                "Sorriso acolhedor, pulinhos de alegria e olhos brilhando no apê",
+            expression: "Sorriso acolhedor, pulinhos de alegria e olhos brilhando no apê",
             isSentimentCard: true,
             imageKey: "happy_home",
         };
     }
 
-    // Rule 3: Default baseline (Nova_100)
-    return {
-        image: NOVA_STAGE_IMAGES[100],
-        tier: 100,
-        title: "Roommate Defensiva & Territorial",
-        expression:
-            "Braços cruzados no cardigã off-white, marcando território no apê",
-        isSentimentCard: false,
-        imageKey: "100",
-    };
+    // 3. Progressive Barrier Milestone Tiers (Natural story progression 100% -> 0%)
+    const tier = getNovaStageTier(barrier);
+    switch (tier) {
+        case 90:
+            return {
+                image: NOVA_STAGE_IMAGES[90],
+                tier: 90,
+                title: "Reflexiva & Curiosa",
+                expression: "Olhar analítico e atento, ouvindo suas ideias",
+                isSentimentCard: false,
+                imageKey: "90",
+            };
+        case 80:
+            return {
+                image: NOVA_STAGE_IMAGES[80],
+                tier: 80,
+                title: "Carona & Convivência",
+                expression: "Passando o tempo ao seu lado no trajeto do dia a dia",
+                isSentimentCard: false,
+                imageKey: "80",
+            };
+        case 70:
+            return {
+                image: NOVA_STAGE_IMAGES[70],
+                tier: 70,
+                title: "Companhia no Sofá",
+                expression: "Relaxando no sofá da sala, dividindo o espaço sem atrito",
+                isSentimentCard: false,
+                imageKey: "70",
+            };
+        case 60:
+            return {
+                image: NOVA_STAGE_IMAGES[60],
+                tier: 60,
+                title: "Tímida & Desarmada",
+                expression: "Primeiros sinais de afeto, tentando disfarçar a timidez",
+                isSentimentCard: false,
+                imageKey: "60",
+            };
+        case 50:
+            return {
+                image: NOVA_STAGE_IMAGES[50],
+                tier: 50,
+                title: "Alegria & Cumplicidade",
+                expression: "O apê se transforma em diversão e boas risadas",
+                isSentimentCard: false,
+                imageKey: "50",
+            };
+        case 40:
+            return {
+                image: NOVA_STAGE_IMAGES[40],
+                tier: 40,
+                title: "Paz & Tranquilidade",
+                expression: "Deitada na grama, sentindo-se segura e em paz",
+                isSentimentCard: false,
+                imageKey: "40",
+            };
+        case 30:
+            return {
+                image: NOVA_STAGE_IMAGES[30],
+                tier: 30,
+                title: "Abraço de Proteção",
+                expression: "Acolhimento sincero, quebrando os medos do passado",
+                isSentimentCard: false,
+                imageKey: "30",
+            };
+        case 20:
+            return {
+                image: NOVA_STAGE_IMAGES[20],
+                tier: 20,
+                title: "Noite de Confiança",
+                expression: "Aconchego na penumbra do quarto, sem filtros",
+                isSentimentCard: false,
+                imageKey: "20",
+            };
+        case 10:
+            return {
+                image: NOVA_STAGE_IMAGES[10],
+                tier: 10,
+                title: "Primeiro Beijo",
+                expression: "Coração acelerado e entrega completa do afeto",
+                isSentimentCard: false,
+                imageKey: "10",
+            };
+        case 0:
+            return {
+                image: NOVA_STAGE_IMAGES[0],
+                tier: 0,
+                title: "Conexão Total & Intimidade",
+                expression: "Cumplicidade pura e intimidade absoluta no apartamento",
+                isSentimentCard: false,
+                imageKey: "0",
+            };
+        case 100:
+        default:
+            return {
+                image: NOVA_STAGE_IMAGES[100],
+                tier: 100,
+                title: "Roommate Defensiva & Territorial",
+                expression: "Braços cruzados no cardigã off-white, marcando território no apê",
+                isSentimentCard: false,
+                imageKey: "100",
+            };
+    }
 }
 
 export function getNovaStageImage(

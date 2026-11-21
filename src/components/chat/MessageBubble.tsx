@@ -72,8 +72,9 @@ export function MessageBubble({
       barrier: effectiveBarrier,
       location: novaState.location,
       sentiment: novaState.sentiment,
+      text: message.text,
     });
-  }, [isNova, novaState, effectiveBarrier]);
+  }, [isNova, novaState, effectiveBarrier, message.text]);
 
   const avatarSource = isMarina
     ? getMarinaStageImage(effectiveBarrier)
